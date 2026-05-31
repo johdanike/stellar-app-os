@@ -9,10 +9,12 @@ function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
     />
   );
 }
+Card.displayName = 'Card';
 
 function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />;
 }
+CardHeader.displayName = 'CardHeader';
 
 function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
@@ -22,17 +24,21 @@ function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) 
     />
   );
 }
+CardTitle.displayName = 'CardTitle';
 
 function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
   return <p className={cn('text-sm text-muted-foreground', className)} {...props} />;
 }
+CardDescription.displayName = 'CardDescription';
 
 function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('p-6 pt-0', className)} {...props} />;
 }
+CardContent.displayName = 'CardContent';
 
 function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('flex items-center p-6 pt-0', className)} {...props} />;
 }
+CardFooter.displayName = 'CardFooter';
 
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };

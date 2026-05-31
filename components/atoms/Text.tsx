@@ -39,6 +39,7 @@ function Text({ className, variant, as, ...props }: TextProps) {
 
   return <Component className={cn(textVariants({ variant, className }))} {...props} />;
 }
+Text.displayName = 'Text';
 
 export { Text, textVariants };
 export type { TextProps };
