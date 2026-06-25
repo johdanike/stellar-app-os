@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useCallback, useMemo, type ReactNo
 import {
   type DonationFlowState,
   type DonorInfo,
+  type RegionAllocation,
   DEFAULT_DONATION_FLOW_STATE,
 } from '@/lib/types/donor';
 
@@ -13,6 +14,7 @@ interface DonationContextValue {
   setTreeCount: (_count: number) => void;
   setIsMonthly: (_isMonthly: boolean) => void;
   setDonorInfo: (_info: Partial<DonorInfo>) => void;
+  setRegionAllocations: (_allocations: RegionAllocation[]) => void;
   resetFlow: () => void;
 }
 
@@ -42,13 +44,17 @@ export function DonationProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setRegionAllocations = useCallback((allocations: RegionAllocation[]) => {
+    setState((prev) => ({ ...prev, regionAllocations: allocations }));
+  }, []);
+
   const resetFlow = useCallback(() => {
     setState({ ...DEFAULT_DONATION_FLOW_STATE });
   }, []);
 
   const value = useMemo(
-    () => ({ state, setAmount, setTreeCount, setIsMonthly, setDonorInfo, resetFlow }),
-    [state, setAmount, setTreeCount, setIsMonthly, setDonorInfo, resetFlow]
+    () => ({ state, setAmount, setTreeCount, setIsMonthly, setDonorInfo, setRegionAllocations, resetFlow }),
+    [state, setAmount, setTreeCount, setIsMonthly, setDonorInfo, setRegionAllocations, resetFlow]
   );
 
   return <DonationContext.Provider value={value}>{children}</DonationContext.Provider>;
