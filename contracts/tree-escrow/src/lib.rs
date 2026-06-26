@@ -124,6 +124,24 @@ pub struct TreeFunding {
     pub status: TreeFundingStatus,
 }
 
+/// Payout record for tracking planter income history.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct Payout {
+    pub planter: Address,
+    pub amount: i128,
+    pub payout_type: PayoutType,
+    pub timestamp: u64,
+}
+
+/// Type of payout made to a planter.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum PayoutType {
+    Tranche1, // 75% on planting verification
+    Tranche2, // 25% on survival verification
+}
+
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
 #[contracttype]
@@ -142,6 +160,10 @@ enum DataKey {
     TreeFunding(u64),
     /// Track if a sponsor has completed their first tree (for referral rewards)
     FirstTreeCompleted(Address),
+    /// Payout history for a planter (farmer)
+    PayoutHistory(Address),
+    /// Payout counter for generating unique payout IDs
+    PayoutCounter,
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -398,7 +420,10 @@ impl TreeEscrow {
             &rec.farmer,
             &tranche1,
         );
-        
+
+        // Record the Tranche1 payout for the farmer
+        Self::record_payout(&env, rec.farmer.clone(), tranche1, PayoutType::Tranche1);
+
         let recipient = rec.gift_recipient.clone().unwrap_or_else(|| rec.donor.clone());
         token::StellarAssetClient::new(&env, &tree_token).mint(&recipient, &tree_tokens);
 
@@ -482,6 +507,9 @@ impl TreeEscrow {
             &tranche2,
         );
 
+        // Record the Tranche2 payout for the farmer
+        Self::record_payout(&env, rec.farmer.clone(), tranche2, PayoutType::Tranche2);
+
         rec.released += tranche2;
         rec.status = EscrowStatus::Completed;
         rec.survival_proof = proof_hash;
@@ -523,6 +551,15 @@ impl TreeEscrow {
 
     pub fn get_record(env: Env, farmer: Address) -> Option<EscrowRecord> {
         env.storage().persistent().get(&DataKey::Escrow(farmer))
+    }
+
+    /// Returns the payout history for a planter (farmer).
+    /// This provides a queryable ledger of all payouts made to the planter.
+    pub fn get_payouts(env: Env, planter: Address) -> Vec<Payout> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::PayoutHistory(planter))
+            .unwrap_or(Vec::new(&env))
     }
 
     // ── Oracle survival reports (#394) ────────────────────────────────────────
@@ -783,6 +820,25 @@ impl TreeEscrow {
             i += 1;
         }
         unit
+    }
+
+    fn record_payout(env: &Env, planter: Address, amount: i128, payout_type: PayoutType) {
+        let key = DataKey::PayoutHistory(planter.clone());
+        let mut payouts: Vec<Payout> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or(Vec::new(env));
+
+        let payout = Payout {
+            planter,
+            amount,
+            payout_type,
+            timestamp: env.ledger().timestamp(),
+        };
+
+        payouts.push_back(payout);
+        env.storage().persistent().set(&key, &payouts);
     }
 }
 
@@ -1418,5 +1474,143 @@ mod tests {
             referrer_balance_after - referrer_balance_before,
             REFERRAL_REWARD
         );
+    }
+
+    // ── Payout history (#500) ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_get_payouts_returns_empty_for_new_planter() {
+        let ctx = setup();
+        let farmer = Address::generate(&ctx.env);
+
+        let payouts = ctx.client.get_payouts(&farmer);
+        assert_eq!(payouts.len(), 0);
+    }
+
+    #[test]
+    fn test_get_payouts_records_tranche1_on_planting() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42);
+
+        ctx.client
+            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &42);
+
+        let payouts = ctx.client.get_payouts(&ctx.farmer);
+        assert_eq!(payouts.len(), 1);
+
+        let payout = payouts.get(0).unwrap();
+        assert_eq!(payout.planter, ctx.farmer);
+        assert_eq!(payout.amount, 7_500); // 75% of 10_000
+        assert_eq!(payout.payout_type, PayoutType::Tranche1);
+        assert!(payout.timestamp > 0);
+    }
+
+    #[test]
+    fn test_get_payouts_records_tranche2_on_survival() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42);
+
+        ctx.client
+            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &42);
+
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        ctx.client
+            .verify_survival(&ctx.farmer, &proof(&ctx.env, 2), &70);
+
+        let payouts = ctx.client.get_payouts(&ctx.farmer);
+        assert_eq!(payouts.len(), 2);
+
+        let payout1 = payouts.get(0).unwrap();
+        assert_eq!(payout1.amount, 7_500);
+        assert_eq!(payout1.payout_type, PayoutType::Tranche1);
+
+        let payout2 = payouts.get(1).unwrap();
+        assert_eq!(payout2.amount, 2_500); // 25% of 10_000
+        assert_eq!(payout2.payout_type, PayoutType::Tranche2);
+        assert!(payout2.timestamp > payout1.timestamp);
+    }
+
+    #[test]
+    fn test_get_payouts_tracks_multiple_escrows_for_same_planter() {
+        let ctx = setup();
+        let farmer = Address::generate(&ctx.env);
+
+        // First escrow
+        ctx.client
+            .deposit(&ctx.donor, &farmer, &ctx.token, &10_000, &42);
+        ctx.client
+            .verify_planting(&farmer, &proof(&ctx.env, 1), &42);
+
+        // Complete first escrow
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+        ctx.client
+            .verify_survival(&farmer, &proof(&ctx.env, 2), &70);
+
+        // Second escrow
+        let donor2 = Address::generate(&ctx.env);
+        fund(&ctx.env, &ctx.token, &donor2, 20_000);
+        ctx.client
+            .deposit(&donor2, &farmer, &ctx.token, &20_000, &50);
+        ctx.client
+            .verify_planting(&farmer, &proof(&ctx.env, 3), &50);
+
+        let payouts = ctx.client.get_payouts(&farmer);
+        assert_eq!(payouts.len(), 3);
+
+        // First escrow: Tranche1 (7_500) and Tranche2 (2_500)
+        assert_eq!(payouts.get(0).unwrap().amount, 7_500);
+        assert_eq!(payouts.get(1).unwrap().amount, 2_500);
+
+        // Second escrow: Tranche1 (15_000 = 75% of 20_000)
+        assert_eq!(payouts.get(2).unwrap().amount, 15_000);
+    }
+
+    #[test]
+    fn test_get_payouts_does_not_record_referral_rewards() {
+        let ctx = setup();
+        let referrer = Address::generate(&ctx.env);
+        let sponsor = Address::generate(&ctx.env);
+        let farmer = Address::generate(&ctx.env);
+
+        fund(&ctx.env, &ctx.token, &ctx.env.current_contract_address(), REFERRAL_REWARD);
+
+        ctx.client.deposit_with_referral(
+            &sponsor,
+            &farmer,
+            &ctx.token,
+            &10_000,
+            &42,
+            &referrer,
+        );
+
+        ctx.client.verify_planting(&farmer, &proof(&ctx.env, 1), &42);
+
+        // Farmer should have only their payout, not the referral reward
+        let farmer_payouts = ctx.client.get_payouts(&farmer);
+        assert_eq!(farmer_payouts.len(), 1);
+        assert_eq!(farmer_payouts.get(0).unwrap().amount, 7_500);
+
+        // Referrer should have no payouts (referral reward is not tracked in payout history)
+        let referrer_payouts = ctx.client.get_payouts(&referrer);
+        assert_eq!(referrer_payouts.len(), 0);
+    }
+
+    #[test]
+    fn test_get_payouts_returns_empty_after_refund() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42);
+
+        ctx.client.refund(&ctx.farmer);
+
+        let payouts = ctx.client.get_payouts(&ctx.farmer);
+        assert_eq!(payouts.len(), 0); // No payouts were made
     }
 }
