@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { Trees } from 'lucide-react';
 import { TreeDonationForm } from '@/components/organisms/TreeDonationForm/TreeDonationForm';
+import { AnonymousQuickPay } from '@/components/molecules/AnonymousQuickPay/AnonymousQuickPay';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,23 +31,29 @@ export default function TreeDonatePage() {
           blockchain. Minimum donation is 2 trees.
         </p>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-10">
-          <Suspense
-            fallback={
-              <div className="animate-pulse space-y-6">
-                <div className="h-8 bg-gray-200 rounded w-1/3" />
-                <div className="flex gap-3">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="h-10 w-20 bg-gray-200 rounded-full" />
-                  ))}
+        <div className="grid gap-8">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-10">
+            <AnonymousQuickPay />
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-10">
+            <Suspense
+              fallback={
+                <div className="animate-pulse space-y-6">
+                  <div className="h-8 bg-gray-200 rounded w-1/3" />
+                  <div className="flex gap-3">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="h-10 w-20 bg-gray-200 rounded-full" />
+                    ))}
+                  </div>
+                  <div className="h-16 bg-gray-200 rounded-xl" />
+                  <div className="h-36 bg-gray-200 rounded-xl" />
                 </div>
-                <div className="h-16 bg-gray-200 rounded-xl" />
-                <div className="h-36 bg-gray-200 rounded-xl" />
-              </div>
-            }
-          >
-            <TreeDonationFormWrapper />
-          </Suspense>
+              }
+            >
+              <TreeDonationFormWrapper />
+            </Suspense>
+          </div>
         </div>
       </div>
     </div>
