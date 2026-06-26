@@ -10,9 +10,9 @@ import { getPool } from '@/lib/db/client';
  * Response shape:
  * {
  *   regions: Array<{
- *     regionKey: string;   // opaque HMAC identifier
- *     lat: number;         // cell center latitude  (~0.25° from any real point)
- *     lng: number;         // cell center longitude (~0.25° from any real point)
+ *     regionKey: string;   // opaque HMAC identifier for the snapped grid cell
+ *     lat: number;         // public cell center latitude
+ *     lng: number;         // public cell center longitude
  *     treesPlanted: number;
  *     farmers: number;
  *   }>
