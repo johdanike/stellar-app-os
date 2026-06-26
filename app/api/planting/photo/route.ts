@@ -4,6 +4,8 @@ import { getDistance } from '@/lib/geo/distance';
 import { uploadImageToS3 } from '@/lib/aws/s3';
 import { encryptGpsCoordinates } from '@/lib/zk/locationProof';
 import { sendPhotoUploadedEmail } from '@/lib/email/sendgrid';
+import { buildRegionHash } from '@/lib/geo/regionHash';
+import { getPool } from '@/lib/db/client';
 
 // Maximum allowable distance (in meters) between Exif GPS and farmer-submitted GPS.
 const MAX_DISTANCE_METERS = 500;
@@ -61,6 +63,20 @@ export async function POST(request: Request) {
 
     // Upload to AWS S3 securely
     const s3Key = await uploadImageToS3(farmerId, buffer, photo.type);
+
+    // Store hashed region for the live map (no raw GPS persisted)
+    const { regionKey, centerLat, centerLon } = buildRegionHash({ lat: exifLat, lon: exifLon });
+    try {
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO planting_regions (region_key, center_lat, center_lon, farmer_id, s3_key, uploaded_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [regionKey, centerLat, centerLon, farmerId, s3Key]
+      );
+    } catch (dbErr) {
+      // Non-fatal: map data is best-effort; don't fail the upload
+      console.error('[planting/photo] region insert error:', dbErr);
+    }
 
     // Encrypt EXIF GPS coordinates for privacy
     const encryptedGps = await encryptGpsCoordinates({ lat: exifLat, lon: exifLon });
