@@ -37,7 +37,7 @@
                         "symbol": "timestamp"
                       },
                       "val": {
-                        "u64": 1700000000
+                        "u64": 0
                       }
                     }
                   ]
@@ -50,51 +50,7 @@
         }
       ]
     ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "register",
-              "args": [
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "farmer_id"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "gps"
-                      },
-                      "val": {
-                        "string": "-1.9999,36.0000"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "timestamp"
-                      },
-                      "val": {
-                        "u64": 1700000001
-                      }
-                    }
-                  ]
-                },
-                "void"
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ]
+    []
   ],
   "ledger": {
     "protocol_version": 21,
@@ -111,7 +67,7 @@
           "contract_data": {
             "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
             "key": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "3bbe08471f3329756dd485ff8bef8afc3177c148b9048f3339277a912dd9d649"
             },
             "durability": "persistent"
           }
@@ -124,7 +80,7 @@
                 "ext": "v0",
                 "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
                 "key": {
-                  "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+                  "bytes": "3bbe08471f3329756dd485ff8bef8afc3177c148b9048f3339277a912dd9d649"
                 },
                 "durability": "persistent",
                 "val": {
@@ -134,69 +90,7 @@
                         "symbol": "commitment"
                       },
                       "val": {
-                        "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "expires_at"
-                      },
-                      "val": "void"
-                    },
-                    {
-                      "key": {
-                        "symbol": "farmer_id"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "registered_at"
-                      },
-                      "val": {
-                        "u64": 0
-                      }
-                    }
-                  ]
-                }
-              }
-            },
-            "ext": "v0"
-          },
-          4095
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "key": {
-              "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
-            },
-            "durability": "persistent"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-                "key": {
-                  "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
-                },
-                "durability": "persistent",
-                "val": {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "commitment"
-                      },
-                      "val": {
-                        "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+                        "bytes": "3bbe08471f3329756dd485ff8bef8afc3177c148b9048f3339277a912dd9d649"
                       }
                     },
                     {
@@ -293,39 +187,6 @@
                 "key": {
                   "ledger_key_nonce": {
                     "nonce": 801925984706572462
-                  }
-                },
-                "durability": "temporary",
-                "val": "void"
-              }
-            },
-            "ext": "v0"
-          },
-          6311999
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-            "key": {
-              "ledger_key_nonce": {
-                "nonce": 5541220902715666415
-              }
-            },
-            "durability": "temporary"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-                "key": {
-                  "ledger_key_nonce": {
-                    "nonce": 5541220902715666415
                   }
                 },
                 "durability": "temporary",
@@ -451,7 +312,7 @@
                         "symbol": "timestamp"
                       },
                       "val": {
-                        "u64": 1700000000
+                        "u64": 0
                       }
                     }
                   ]
@@ -480,7 +341,7 @@
               }
             ],
             "data": {
-              "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+              "bytes": "3bbe08471f3329756dd485ff8bef8afc3177c148b9048f3339277a912dd9d649"
             }
           }
         }
@@ -503,7 +364,7 @@
               }
             ],
             "data": {
-              "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+              "bytes": "3bbe08471f3329756dd485ff8bef8afc3177c148b9048f3339277a912dd9d649"
             }
           }
         }
@@ -525,64 +386,11 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
               },
               {
-                "symbol": "register"
+                "symbol": "is_registered"
               }
             ],
             "data": {
-              "vec": [
-                {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "farmer_id"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "gps"
-                      },
-                      "val": {
-                        "string": "-1.9999,36.0000"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "timestamp"
-                      },
-                      "val": {
-                        "u64": 1700000001
-                      }
-                    }
-                  ]
-                },
-                "void"
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "FarmerRegistered"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-              }
-            ],
-            "data": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "3bbe08471f3329756dd485ff8bef8afc3177c148b9048f3339277a912dd9d649"
             }
           }
         }
@@ -601,11 +409,11 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "register"
+                "symbol": "is_registered"
               }
             ],
             "data": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bool": true
             }
           }
         }

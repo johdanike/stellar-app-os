@@ -42,7 +42,9 @@
                     }
                   ]
                 },
-                "void"
+                {
+                  "u64": 1800000000
+                }
               ]
             }
           },
@@ -74,7 +76,7 @@
                         "symbol": "gps"
                       },
                       "val": {
-                        "string": "-1.9999,36.0000"
+                        "string": "-1.2345,36.8219"
                       }
                     },
                     {
@@ -82,7 +84,7 @@
                         "symbol": "timestamp"
                       },
                       "val": {
-                        "u64": 1700000001
+                        "u64": 1700086400
                       }
                     }
                   ]
@@ -94,12 +96,15 @@
           "sub_invocations": []
         }
       ]
-    ]
+    ],
+    [],
+    [],
+    []
   ],
   "ledger": {
     "protocol_version": 21,
     "sequence_number": 0,
-    "timestamp": 0,
+    "timestamp": 1800000001,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
     "min_persistent_entry_ttl": 4096,
@@ -111,7 +116,7 @@
           "contract_data": {
             "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
             "key": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
             },
             "durability": "persistent"
           }
@@ -124,7 +129,7 @@
                 "ext": "v0",
                 "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
                 "key": {
-                  "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+                  "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
                 },
                 "durability": "persistent",
                 "val": {
@@ -134,69 +139,7 @@
                         "symbol": "commitment"
                       },
                       "val": {
-                        "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "expires_at"
-                      },
-                      "val": "void"
-                    },
-                    {
-                      "key": {
-                        "symbol": "farmer_id"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "registered_at"
-                      },
-                      "val": {
-                        "u64": 0
-                      }
-                    }
-                  ]
-                }
-              }
-            },
-            "ext": "v0"
-          },
-          4095
-        ]
-      ],
-      [
-        {
-          "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-            "key": {
-              "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
-            },
-            "durability": "persistent"
-          }
-        },
-        [
-          {
-            "last_modified_ledger_seq": 0,
-            "data": {
-              "contract_data": {
-                "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-                "key": {
-                  "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
-                },
-                "durability": "persistent",
-                "val": {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "commitment"
-                      },
-                      "val": {
-                        "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+                        "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
                       }
                     },
                     {
@@ -456,7 +399,9 @@
                     }
                   ]
                 },
-                "void"
+                {
+                  "u64": 1800000000
+                }
               ]
             }
           }
@@ -545,7 +490,7 @@
                         "symbol": "gps"
                       },
                       "val": {
-                        "string": "-1.9999,36.0000"
+                        "string": "-1.2345,36.8219"
                       }
                     },
                     {
@@ -553,7 +498,7 @@
                         "symbol": "timestamp"
                       },
                       "val": {
-                        "u64": 1700000001
+                        "u64": 1700086400
                       }
                     }
                   ]
@@ -582,7 +527,7 @@
               }
             ],
             "data": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
             }
           }
         }
@@ -605,7 +550,159 @@
               }
             ],
             "data": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "cleanup_expired"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+                },
+                {
+                  "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "cleanup_expired"
+              }
+            ],
+            "data": "void"
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bool": false
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bytes": "a787d73b2c2cc483cd599a5847374d1545eeafc8af1c5dfa8a13919491f4a7c2"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bool": true
             }
           }
         }

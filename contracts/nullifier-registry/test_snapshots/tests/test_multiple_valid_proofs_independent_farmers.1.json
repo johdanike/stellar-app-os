@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 3,
+    "address": 4,
     "nonce": 0
   },
   "auth": [
@@ -52,7 +52,7 @@
     ],
     [
       [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
         {
           "function": {
             "contract_fn": {
@@ -66,7 +66,7 @@
                         "symbol": "farmer_id"
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                       }
                     },
                     {
@@ -74,7 +74,7 @@
                         "symbol": "gps"
                       },
                       "val": {
-                        "string": "-1.9999,36.0000"
+                        "string": "-1.2345,36.8219"
                       }
                     },
                     {
@@ -82,7 +82,7 @@
                         "symbol": "timestamp"
                       },
                       "val": {
-                        "u64": 1700000001
+                        "u64": 1700000000
                       }
                     }
                   ]
@@ -94,7 +94,9 @@
           "sub_invocations": []
         }
       ]
-    ]
+    ],
+    [],
+    []
   ],
   "ledger": {
     "protocol_version": 21,
@@ -111,7 +113,7 @@
           "contract_data": {
             "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
             "key": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "23c8e4146f6271221f3d02aeff7d319d47cc4c4ad817f4910d6ffe508ee85363"
             },
             "durability": "persistent"
           }
@@ -124,7 +126,7 @@
                 "ext": "v0",
                 "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
                 "key": {
-                  "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+                  "bytes": "23c8e4146f6271221f3d02aeff7d319d47cc4c4ad817f4910d6ffe508ee85363"
                 },
                 "durability": "persistent",
                 "val": {
@@ -134,7 +136,7 @@
                         "symbol": "commitment"
                       },
                       "val": {
-                        "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+                        "bytes": "23c8e4146f6271221f3d02aeff7d319d47cc4c4ad817f4910d6ffe508ee85363"
                       }
                     },
                     {
@@ -148,7 +150,7 @@
                         "symbol": "farmer_id"
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                       }
                     },
                     {
@@ -307,7 +309,7 @@
       [
         {
           "contract_data": {
-            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
             "key": {
               "ledger_key_nonce": {
                 "nonce": 5541220902715666415
@@ -322,7 +324,7 @@
             "data": {
               "contract_data": {
                 "ext": "v0",
-                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
                 "key": {
                   "ledger_key_nonce": {
                     "nonce": 5541220902715666415
@@ -537,7 +539,7 @@
                         "symbol": "farmer_id"
                       },
                       "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                       }
                     },
                     {
@@ -545,7 +547,7 @@
                         "symbol": "gps"
                       },
                       "val": {
-                        "string": "-1.9999,36.0000"
+                        "string": "-1.2345,36.8219"
                       }
                     },
                     {
@@ -553,7 +555,7 @@
                         "symbol": "timestamp"
                       },
                       "val": {
-                        "u64": 1700000001
+                        "u64": 1700000000
                       }
                     }
                   ]
@@ -578,11 +580,11 @@
                 "symbol": "FarmerRegistered"
               },
               {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
               }
             ],
             "data": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "23c8e4146f6271221f3d02aeff7d319d47cc4c4ad817f4910d6ffe508ee85363"
             }
           }
         }
@@ -605,7 +607,105 @@
               }
             ],
             "data": {
-              "bytes": "c20642c9cf246b11e03f6212eba087abeec32d97b91b10005b6be6ae6f98bd76"
+              "bytes": "23c8e4146f6271221f3d02aeff7d319d47cc4c4ad817f4910d6ffe508ee85363"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bytes": "ff965a5a89e04e2598f377bf8bb0e89225ff4c1601cb38a92fc5b08cd22aa49b"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bool": true
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": null,
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bytes": "23c8e4146f6271221f3d02aeff7d319d47cc4c4ad817f4910d6ffe508ee85363"
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_registered"
+              }
+            ],
+            "data": {
+              "bool": true
             }
           }
         }
