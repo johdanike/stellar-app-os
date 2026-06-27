@@ -84,6 +84,7 @@ pub enum EscrowStatus {
 pub trait AmmInterface {
     fn deposit(env: Env, from: Address, token: Address, amount: i128) -> i128;
     fn withdraw(env: Env, from: Address, token: Address, share_amount: i128) -> i128;
+    fn swap(env: Env, from: Address, token_in: Address, token_out: Address, amount_in: i128) -> i128;
 }
 
 #[contracttype]
@@ -130,7 +131,7 @@ impl TreeEscrow {
     /// when planting verification is confirmed.
     ///
     /// OPTIMIZED: Cache tree token decimals to avoid repeated calculations
-    pub fn initialize(env: Env, admin: Address, tree_token: Address, amm: Address) {
+    pub fn initialize(env: Env, admin: Address, tree_token: Address, amm: Address, xlm: Address, usdc: Address) {
         if env.storage().instance().has(&symbol_short!("ADMINTREE")) {
             panic!("already initialized");
         }
@@ -146,7 +147,7 @@ impl TreeEscrow {
         // OPTIMIZATION: Store admin and tree token as tuple (reduces reads from 2 to 1)
         env.storage().instance().set(
             &symbol_short!("ADMINTREE"),
-            &(admin, tree_token, tree_decimals, amm),
+            &(admin, tree_token, tree_decimals, amm, xlm, usdc),
         );
     }
 
@@ -180,8 +181,17 @@ impl TreeEscrow {
         // Pull funds from donor into contract
         token::Client::new(&env, &token).transfer(&donor, &env.current_contract_address(), &amount);
 
-        let (_, _, _, amm): (Address, Address, u32, Address) = env.storage().instance().get(&symbol_short!("ADMINTREE")).expect("contract not initialized");
-        let lp_shares = AmmClient::new(&env, &amm).deposit(&env.current_contract_address(), &token, &amount);
+        let (_, _, _, amm, xlm, usdc): (Address, Address, u32, Address, Address, Address) = env.storage().instance().get(&symbol_short!("ADMINTREE")).expect("contract not initialized");
+        
+        let fee = (amount * 200) / 10_000;
+        let net_amount = amount - fee;
+
+        if fee > 0 && token == xlm {
+            let swap_amount = fee / 2;
+            AmmClient::new(&env, &amm).swap(&env.current_contract_address(), &xlm, &usdc, &swap_amount);
+        }
+
+        let lp_shares = AmmClient::new(&env, &amm).deposit(&env.current_contract_address(), &token, &net_amount);
 
         env.storage().persistent().set(
             &key,
@@ -189,7 +199,7 @@ impl TreeEscrow {
                 donor: donor.clone(),
                 farmer: farmer.clone(),
                 token,
-                total_amount: amount,
+                total_amount: net_amount,
                 tree_count,
                 verified_tree_count: 0,
                 tree_tokens_minted: 0,
@@ -204,7 +214,7 @@ impl TreeEscrow {
         );
 
         env.events()
-            .publish((symbol_short!("deposit"), farmer), amount);
+            .publish((symbol_short!("deposit"), farmer), net_amount);
     }
 
     /// Batch deposit: donor funds N tree slots in a single contract invocation.
@@ -244,15 +254,25 @@ impl TreeEscrow {
         // Single token transfer for the entire batch — gas-efficient
         token::Client::new(&env, &token).transfer(&donor, &env.current_contract_address(), &total);
 
-        let (_, _, _, amm): (Address, Address, u32, Address) = env.storage().instance().get(&symbol_short!("ADMINTREE")).expect("contract not initialized");
-        let total_lp_shares = AmmClient::new(&env, &amm).deposit(&env.current_contract_address(), &token, &total);
+        let (_, _, _, amm, xlm, usdc): (Address, Address, u32, Address, Address, Address) = env.storage().instance().get(&symbol_short!("ADMINTREE")).expect("contract not initialized");
+        
+        let fee = (total * 200) / 10_000;
+        let net_total = total - fee;
+
+        if fee > 0 && token == xlm {
+            let swap_amount = fee / 2;
+            AmmClient::new(&env, &amm).swap(&env.current_contract_address(), &xlm, &usdc, &swap_amount);
+        }
+
+        let total_lp_shares = AmmClient::new(&env, &amm).deposit(&env.current_contract_address(), &token, &net_total);
         let mut allocated_shares = 0;
 
         // Write one escrow record per slot
         for i in 0..n {
             let slot = slots.get(i).unwrap();
             let key = Self::record_key(&env, &slot.farmer);
-            let mut slot_shares = (slot.amount * total_lp_shares) / total;
+            let slot_net = slot.amount - (slot.amount * 200) / 10_000;
+            let mut slot_shares = if net_total > 0 { (slot_net * total_lp_shares) / net_total } else { 0 };
             if i == n - 1 {
                 slot_shares = total_lp_shares - allocated_shares;
             } else {
@@ -264,7 +284,7 @@ impl TreeEscrow {
                     donor: donor.clone(),
                     farmer: slot.farmer.clone(),
                     token: token.clone(),
-                    total_amount: slot.amount,
+                    total_amount: slot_net,
                     tree_count: 1,
                     verified_tree_count: 0,
                     tree_tokens_minted: 0,
@@ -278,10 +298,10 @@ impl TreeEscrow {
                 },
             );
             env.events()
-                .publish((symbol_short!("deposit"), slot.farmer), slot.amount);
+                .publish((symbol_short!("deposit"), slot.farmer), slot_net);
         }
 
-        env.events().publish((symbol_short!("batch"), donor), total);
+        env.events().publish((symbol_short!("batch"), donor), net_total);
     }
 
     /// Verifier calls this after GPS + photo proof of planting is validated.
@@ -296,7 +316,7 @@ impl TreeEscrow {
         verified_tree_count: i128,
     ) {
         // OPTIMIZATION: Single read for admin, tree token, and decimals (was 2 reads)
-        let (admin, tree_token, tree_decimals, amm): (Address, Address, u32, Address) = env
+        let (admin, tree_token, tree_decimals, amm, _xlm, _usdc): (Address, Address, u32, Address, Address, Address) = env
             .storage()
             .instance()
             .get(&symbol_short!("ADMINTREE"))
@@ -372,7 +392,7 @@ impl TreeEscrow {
         survival_rate_percent: u32,
     ) {
         // OPTIMIZATION: Single read for admin (tree token not needed here)
-        let (admin, _tree_token, _tree_decimals, amm): (Address, Address, u32, Address) = env
+        let (admin, _tree_token, _tree_decimals, amm, _xlm, _usdc): (Address, Address, u32, Address, Address, Address) = env
             .storage()
             .instance()
             .get(&symbol_short!("ADMINTREE"))
@@ -433,7 +453,7 @@ impl TreeEscrow {
 
     pub fn refund(env: Env, farmer: Address) {
         // OPTIMIZATION: Single read for admin
-        let (admin, _tree_token, _tree_decimals, amm): (Address, Address, u32, Address) = env
+        let (admin, _tree_token, _tree_decimals, amm, _xlm, _usdc): (Address, Address, u32, Address, Address, Address) = env
             .storage()
             .instance()
             .get(&symbol_short!("ADMINTREE"))
@@ -493,7 +513,7 @@ impl TreeEscrow {
     }
 
     fn tree_token(env: &Env) -> Address {
-        let (_admin, tree_token, _decimals, _amm): (Address, Address, u32, Address) = env
+        let (_admin, tree_token, _decimals, _amm, _xlm, _usdc): (Address, Address, u32, Address, Address, Address) = env
             .storage()
             .instance()
             .get(&symbol_short!("ADMINTREE"))
@@ -502,7 +522,7 @@ impl TreeEscrow {
     }
 
     fn require_admin(env: &Env) {
-        let (admin, _tree_token, _decimals, _amm): (Address, Address, u32, Address) = env
+        let (admin, _tree_token, _decimals, _amm, _xlm, _usdc): (Address, Address, u32, Address, Address, Address) = env
             .storage()
             .instance()
             .get(&symbol_short!("ADMINTREE"))
@@ -543,6 +563,11 @@ mod tests {
             token::Client::new(&env, &token).transfer(&caller, &from, &shares);
             shares
         }
+        pub fn swap(env: Env, from: Address, token_in: Address, _token_out: Address, amount_in: i128) -> i128 {
+            let caller = env.current_contract_address();
+            token::Client::new(&env, &token_in).transfer(&from, &caller, &amount_in);
+            amount_in
+        }
     }
 
 fn setup() -> Ctx {
@@ -565,7 +590,9 @@ fn setup() -> Ctx {
         let amm = env.register_contract(None, MockAmm);
         token::StellarAssetClient::new(&env, &token).mint(&donor, &10_000);
 
-        client.initialize(&admin, &tree_token, &amm);
+        let xlm = token.clone();
+        let usdc = env.register_stellar_asset_contract_v2(admin.clone()).address();
+        client.initialize(&admin, &tree_token, &amm, &xlm, &usdc);
         Ctx {
             env,
             client,
@@ -609,18 +636,18 @@ fn setup() -> Ctx {
 
         let rec = client.get_record(&farmer).unwrap();
         assert_eq!(rec.status,       EscrowStatus::Funded);
-        assert_eq!(rec.total_amount, 10_000);
+        assert_eq!(rec.total_amount, 9_800);
         assert_eq!(rec.released,     0);
 
         // Step 2: Planting verification → 75% released
         client.verify_planting(&farmer, &proof(&env, 1), &1);
 
         // assert_eq!(balance(&env, &token, &contract), 2_500, "25% still locked");
-        assert_eq!(balance(&env, &token, &farmer),   7_500, "farmer received 75%");
+        assert_eq!(balance(&env, &token, &farmer),   7_350, "farmer received 75%");
 
         let rec = client.get_record(&farmer).unwrap();
         assert_eq!(rec.status, EscrowStatus::Planted);
-        assert_eq!(rec.released, 7_500);
+        assert_eq!(rec.released, 7_350);
         assert!(rec.planting_proof.is_some());
         assert!(rec.planted_at.is_some());
 
@@ -631,11 +658,11 @@ fn setup() -> Ctx {
         client.verify_survival(&farmer, &proof(&env, 2), &80);
 
         // assert_eq!(balance(&env, &token, &contract), 0,      "contract fully drained");
-        assert_eq!(balance(&env, &token, &farmer),   10_000, "farmer received 100%");
+        assert_eq!(balance(&env, &token, &farmer),   9_800, "farmer received 100%");
 
         let rec = client.get_record(&farmer).unwrap();
         assert_eq!(rec.status, EscrowStatus::Completed);
-        assert_eq!(rec.released, 10_000);
+        assert_eq!(rec.released, 9_800);
         assert!(rec.survival_proof.is_some());
     }
 
@@ -647,12 +674,12 @@ fn setup() -> Ctx {
 
         client.verify_planting(&farmer, &proof(&env, 1), &1);
         let tranche1 = (1_001_i128 * 7_500) / 10_000; // = 750
-        assert_eq!(balance(&env, &token, &farmer), tranche1);
+        assert_eq!(balance(&env, &token, &farmer), 735);
 
         advance_ledger(&env, SIX_MONTHS_SECS + 1);
         client.verify_survival(&farmer, &proof(&env, 2), &80);
 
-        assert_eq!(balance(&env, &token, &farmer),   1_001);
+        assert_eq!(balance(&env, &token, &farmer),   981);
         // assert_eq!(balance(&env, &token, &contract), 0);
     }
 
@@ -743,7 +770,7 @@ fn setup() -> Ctx {
 
         client.refund(&farmer);
 
-        assert_eq!(balance(&env, &token, &donor),  10_000, "donor fully refunded");
+        assert_eq!(balance(&env, &token, &donor), 9_800, "donor fully refunded");
         assert_eq!(balance(&env, &token, &farmer),  0,     "farmer got nothing");
         assert_eq!(client.get_record(&farmer).unwrap().status, EscrowStatus::Refunded);
     }
@@ -763,7 +790,7 @@ fn setup() -> Ctx {
     #[should_panic(expected = "already initialized")]
     fn test_initialize_twice_rejected() {
         let Ctx { env, client, tree_token, .. } = setup();
-        client.initialize(&Address::generate(&env), &tree_token, &Address::generate(&env));
+        client.initialize(&Address::generate(&env), &tree_token, &Address::generate(&env), &Address::generate(&env), &Address::generate(&env));
     }
 
     #[test]
