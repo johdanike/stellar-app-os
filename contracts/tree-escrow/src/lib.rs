@@ -108,6 +108,7 @@ pub struct BatchSlot {
     pub farmer: Address,
     pub amount: i128,
     pub gift_recipient: Option<Address>,
+    pub referrer: Option<Address>,
 }
 
 /// Oracle-submitted survival report for a single tree.
