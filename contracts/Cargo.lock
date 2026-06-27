@@ -22,6 +22,7 @@ name = "admin-controls"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -29,6 +30,7 @@ dependencies = [
 name = "aggregate-impact-verifier"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -539,6 +541,7 @@ name = "donation-escrow"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -643,6 +646,7 @@ name = "escrow-milestone"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -656,6 +660,7 @@ checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 name = "farmer-registry"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -755,6 +760,13 @@ dependencies = [
  "ff",
  "rand_core 0.6.4",
  "subtle",
+]
+
+[[package]]
+name = "harvesta-errors"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 21.7.7",
 ]
 
 [[package]]
@@ -920,6 +932,7 @@ dependencies = [
 name = "kyc-attestation"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -945,6 +958,7 @@ checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 name = "location-proof"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -974,6 +988,7 @@ name = "naira-payout"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -981,6 +996,7 @@ dependencies = [
 name = "nullifier-registry"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -1837,6 +1853,14 @@ dependencies = [
 name = "species-registry"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
+name = "species-voting"
+version = "0.1.0"
+dependencies = [
  "soroban-sdk 21.7.7",
 ]
 
@@ -2026,6 +2050,7 @@ name = "tree-escrow"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "harvesta-errors",
  "proptest",
  "soroban-sdk 21.7.7",
 ]
@@ -2035,6 +2060,7 @@ name = "tree-token"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
@@ -2286,6 +2312,7 @@ dependencies = [
 name = "zk-location-verifier"
 version = "0.1.0"
 dependencies = [
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 

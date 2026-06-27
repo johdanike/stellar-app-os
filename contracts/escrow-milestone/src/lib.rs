@@ -14,11 +14,11 @@
 //!   - The arbiter can then call `resolve_dispute()` to either release funds to
 //!     the seller (farmer) or refund them to the buyer (funder).
 
+use harvesta_errors::HarvestaError;
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN,
     Env, IntoVal, Symbol,
 };
-use harvesta_errors::HarvestaError;
 
 /// Percentage released on first milestone verification (basis points: 7500 = 75%)
 const MILESTONE_1_BPS: i128 = 7500;
@@ -117,7 +117,15 @@ impl EscrowMilestone {
         amount: i128,
         arbiter: Address,
     ) {
-        Self::deposit_internal(env, funder, Some(recipient_wallet), farmer, token, amount, arbiter);
+        Self::deposit_internal(
+            env,
+            funder,
+            Some(recipient_wallet),
+            farmer,
+            token,
+            amount,
+            arbiter,
+        );
     }
 
     fn deposit_internal(
@@ -146,21 +154,24 @@ impl EscrowMilestone {
             &amount,
         );
 
-        env.storage().persistent().set(&key, &EscrowState {
-            farmer: farmer.clone(),
-            funder,
-            gift_recipient,
-            token,
-            total_amount: amount,
-            released: 0,
-            status: EscrowStatus::Funded,
-            verification_hash: OptProof::None,
-            milestone1_verified_at: 0,
-            survival_verification_hash: OptProof::None,
-            survival_rate_percent: 0,
-            arbiter,
-            dispute_open: false,
-        });
+        env.storage().persistent().set(
+            &key,
+            &EscrowState {
+                farmer: farmer.clone(),
+                funder,
+                gift_recipient,
+                token,
+                total_amount: amount,
+                released: 0,
+                status: EscrowStatus::Funded,
+                verification_hash: OptProof::None,
+                milestone1_verified_at: 0,
+                survival_verification_hash: OptProof::None,
+                survival_rate_percent: 0,
+                arbiter,
+                dispute_open: false,
+            },
+        );
 
         env.events()
             .publish((symbol_short!("deposit"), farmer), amount);
@@ -303,8 +314,11 @@ impl EscrowMilestone {
             panic_with_error!(&env, HarvestaError::NothingToRelease);
         }
 
-        token::Client::new(&env, &state.token)
-            .transfer(&env.current_contract_address(), &state.farmer, &remainder);
+        token::Client::new(&env, &state.token).transfer(
+            &env.current_contract_address(),
+            &state.farmer,
+            &remainder,
+        );
 
         state.released += remainder;
         state.status = EscrowStatus::Completed;
@@ -589,8 +603,16 @@ mod tests {
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
         client.verify_survival(&farmer, &dummy_hash(&env, 2), &80);
 
-        assert_eq!(balance(&env, &token, &contract), 0, "contract fully drained");
-        assert_eq!(balance(&env, &token, &farmer), 10_000, "farmer received 100%");
+        assert_eq!(
+            balance(&env, &token, &contract),
+            0,
+            "contract fully drained"
+        );
+        assert_eq!(
+            balance(&env, &token, &farmer),
+            10_000,
+            "farmer received 100%"
+        );
 
         let state = client.get_escrow(&farmer).unwrap();
         assert_eq!(state.status, EscrowStatus::Completed);
@@ -677,7 +699,8 @@ mod tests {
         assert_eq!(balance(&env, &token, &farmer), tranche1);
 
         // Advance time for survival check
-        env.ledger().with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+        env.ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
         client.verify_survival(&farmer, &dummy_hash(&env, 2), &80);
         assert_eq!(balance(&env, &token, &farmer), 999);
         assert_eq!(balance(&env, &token, &contract), 0);

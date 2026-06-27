@@ -34,11 +34,11 @@
 //!     payload against a tree_id for later verification.
 //!   • `get_qr_hash` — retrieve the stored hash for off-chain label checking.
 
+use harvesta_errors::HarvestaError;
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN,
     Env, String, Symbol, Vec,
 };
-use harvesta_errors::HarvestaError;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -214,7 +214,7 @@ pub struct PlanterRating {
 pub struct PlanterReputation {
     pub farmer: Address,
     pub total_ratings: u32,
-    pub sum_ratings: u128, // Sum of all ratings (1-5 each)
+    pub sum_ratings: u128,   // Sum of all ratings (1-5 each)
     pub average_rating: u32, // Calculated as sum / total (scaled to 0-100)
 }
 
@@ -319,7 +319,16 @@ impl TreeEscrow {
         tree_count: i128,
         area_hectares: i128,
     ) {
-        Self::deposit_internal(env, donor, None, farmer, token, amount, tree_count, area_hectares);
+        Self::deposit_internal(
+            env,
+            donor,
+            None,
+            farmer,
+            token,
+            amount,
+            tree_count,
+            area_hectares,
+        );
     }
 
     /// Sponsor trees as a gift - NFT receipt and carbon credits go to a different recipient address.
@@ -340,7 +349,16 @@ impl TreeEscrow {
         tree_count: i128,
         area_hectares: i128,
     ) {
-        Self::deposit_internal(env, donor, Some(recipient_wallet), farmer, token, amount, tree_count, area_hectares);
+        Self::deposit_internal(
+            env,
+            donor,
+            Some(recipient_wallet),
+            farmer,
+            token,
+            amount,
+            tree_count,
+            area_hectares,
+        );
     }
 
     fn deposit_internal(
@@ -438,8 +456,7 @@ impl TreeEscrow {
         }
 
         contract_utils::assert_whitelisted(&env, &token);
-        token::Client::new(&env, &token)
-            .transfer(&donor, &env.current_contract_address(), &total);
+        token::Client::new(&env, &token).transfer(&donor, &env.current_contract_address(), &total);
 
         let empty_hash = BytesN::from_array(&env, &[0; 32]);
         for i in 0..n {
@@ -448,7 +465,7 @@ impl TreeEscrow {
             // Batch deposits use a fixed small area (0.01 hectares) per tree
             // This ensures batch deposits are exempt from density rules (below threshold)
             let batch_area_hectares = 1_i128 / 100; // 0.01 hectares per tree
-            
+
             env.storage().persistent().set(
                 &key,
                 &EscrowRecord {
@@ -531,7 +548,10 @@ impl TreeEscrow {
                 .checked_mul(tree_unit)
                 .expect("tree token mint amount overflow");
 
-            let recipient = rec.gift_recipient.clone().unwrap_or_else(|| rec.donor.clone());
+            let recipient = rec
+                .gift_recipient
+                .clone()
+                .unwrap_or_else(|| rec.donor.clone());
             token::StellarAssetClient::new(&env, &tree_token).mint(&recipient, &tree_tokens);
 
             rec.verified_tree_count = verified_tree_count;
@@ -557,8 +577,10 @@ impl TreeEscrow {
 
         env.storage().persistent().set(&key, &rec);
 
-        env.events()
-            .publish((symbol_short!("progress"), farmer), (rec.progress_updates, stream_amount));
+        env.events().publish(
+            (symbol_short!("progress"), farmer),
+            (rec.progress_updates, stream_amount),
+        );
     }
 
     /// Submit an off-chain photo + GPS progress proof for a registered tree.
@@ -678,11 +700,7 @@ impl TreeEscrow {
 
     /// Admin-verified 1-year milestone: releases Tranche 3 (30%) once 1 year
     /// has elapsed since planting.
-    pub fn verify_year_milestone(
-        env: Env,
-        farmer: Address,
-        proof_hash: BytesN<32>,
-    ) {
+    pub fn verify_year_milestone(env: Env, farmer: Address, proof_hash: BytesN<32>) {
         let (admin, _tree_token, _decimals) = Self::admin_tree(&env);
         admin.require_auth();
 
@@ -759,12 +777,7 @@ impl TreeEscrow {
 
     /// Sponsor rates a planter after job completion. Rating must be 1-5 stars.
     /// Only callable by the original donor after escrow is completed.
-    pub fn rate_planter(
-        env: Env,
-        sponsor: Address,
-        farmer: Address,
-        rating: u32,
-    ) {
+    pub fn rate_planter(env: Env, sponsor: Address, farmer: Address, rating: u32) {
         sponsor.require_auth();
 
         if rating < 1 || rating > 5 {
@@ -804,16 +817,16 @@ impl TreeEscrow {
 
         // Update aggregated reputation
         let rep_key = DataKey::PlanterReputation(farmer.clone());
-        let mut rep: PlanterReputation = env
-            .storage()
-            .persistent()
-            .get(&rep_key)
-            .unwrap_or(PlanterReputation {
-                farmer: farmer.clone(),
-                total_ratings: 0,
-                sum_ratings: 0,
-                average_rating: 0,
-            });
+        let mut rep: PlanterReputation =
+            env.storage()
+                .persistent()
+                .get(&rep_key)
+                .unwrap_or(PlanterReputation {
+                    farmer: farmer.clone(),
+                    total_ratings: 0,
+                    sum_ratings: 0,
+                    average_rating: 0,
+                });
 
         rep.total_ratings += 1;
         rep.sum_ratings += rating as u128;
@@ -826,7 +839,9 @@ impl TreeEscrow {
     }
 
     pub fn get_planter_reputation(env: Env, farmer: Address) -> Option<PlanterReputation> {
-        env.storage().persistent().get(&DataKey::PlanterReputation(farmer))
+        env.storage()
+            .persistent()
+            .get(&DataKey::PlanterReputation(farmer))
     }
 
     // ── Oracle survival reports (#394) ────────────────────────────────────────
@@ -1023,11 +1038,7 @@ impl TreeEscrow {
             let c = funding.contributions.get(i).unwrap();
             let payout = (c.amount * payout_amount) / funding.total_funded;
             if payout > 0 {
-                token_client.transfer(
-                    &env.current_contract_address(),
-                    &c.funder,
-                    &payout,
-                );
+                token_client.transfer(&env.current_contract_address(), &c.funder, &payout);
             }
             paid_so_far += payout;
             env.events()
@@ -1068,16 +1079,13 @@ impl TreeEscrow {
             .map(|funding: TreeFunding| funding.progress_entries)
     }
 
-
     // ── Dispute resolution (#469) ─────────────────────────────────────────────
 
     /// Admin configures the DAO member set that may vote on verification disputes.
     pub fn set_dao_members(env: Env, members: soroban_sdk::Vec<Address>) {
         let (admin, _tree_token, _decimals) = Self::admin_tree(&env);
         admin.require_auth();
-        env.storage()
-            .instance()
-            .set(&DataKey::DaoMembers, &members);
+        env.storage().instance().set(&DataKey::DaoMembers, &members);
     }
 
     pub fn get_dao_members(env: Env) -> soroban_sdk::Vec<Address> {
@@ -1089,12 +1097,7 @@ impl TreeEscrow {
 
     /// Sponsor opens a dispute within 7 days of an oracle verification report.
     /// Pauses any pending proportional fund release for the tree.
-    pub fn open_dispute(
-        env: Env,
-        sponsor: Address,
-        tree_id: u64,
-        evidence_cid: BytesN<32>,
-    ) {
+    pub fn open_dispute(env: Env, sponsor: Address, tree_id: u64, evidence_cid: BytesN<32>) {
         sponsor.require_auth();
 
         let report: OracleReport = env
@@ -1109,7 +1112,11 @@ impl TreeEscrow {
         }
 
         let dispute_key = DataKey::Dispute(tree_id);
-        if let Some(existing) = env.storage().persistent().get::<_, DisputeRecord>(&dispute_key) {
+        if let Some(existing) = env
+            .storage()
+            .persistent()
+            .get::<_, DisputeRecord>(&dispute_key)
+        {
             if !existing.resolved {
                 panic!("dispute already open for tree");
             }
@@ -1138,10 +1145,8 @@ impl TreeEscrow {
 
         env.storage().persistent().set(&dispute_key, &dispute);
 
-        env.events().publish(
-            (symbol_short!("DispOpen"), tree_id),
-            sponsor,
-        );
+        env.events()
+            .publish((symbol_short!("DispOpen"), tree_id), sponsor);
     }
 
     /// DAO member casts an arbitration vote on an open dispute.
@@ -1211,10 +1216,8 @@ impl TreeEscrow {
         dispute.outcome = outcome.clone();
         env.storage().persistent().set(&dispute_key, &dispute);
 
-        env.events().publish(
-            (symbol_short!("DispResol"), tree_id),
-            outcome,
-        );
+        env.events()
+            .publish((symbol_short!("DispResol"), tree_id), outcome);
     }
 
     pub fn get_dispute(env: Env, tree_id: u64) -> Option<DisputeRecord> {
@@ -1410,7 +1413,10 @@ mod tests {
         let entry = progress.get(0).unwrap();
         assert_eq!(entry.tree_id, 101);
         assert_eq!(entry.planter, ctx.planter);
-        assert_eq!(entry.ipfs_cid, String::from_str(&ctx.env, "bafybeigdyrztreecid001"));
+        assert_eq!(
+            entry.ipfs_cid,
+            String::from_str(&ctx.env, "bafybeigdyrztreecid001")
+        );
         assert_eq!(entry.gps_lat, 12);
         assert_eq!(entry.gps_lng, 34);
         assert_eq!(entry.timestamp, 1_717_000_000);

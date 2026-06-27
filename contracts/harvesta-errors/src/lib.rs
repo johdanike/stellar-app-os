@@ -53,4 +53,19 @@ pub enum HarvestaError {
     // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
+
+    // ── Token whitelist / payment support (82–83) ────────────────────────────
+    UnsupportedToken = 82,
+    TokenAlreadyAccepted = 83,
+
+    // ── Donation escrow / recurring support (84–92) ─────────────────────────
+    AlreadyProcessed = 84,
+    AmountPerIntervalMustBePositive = 85,
+    IntervalSecondsMustBePositive = 86,
+    RecurringDonationNotFound = 87,
+    DonationCancelled = 88,
+    IntervalNotElapsed = 89,
+    ProjectNotRegistered = 90,
+    NotDonor = 91,
+    DonationAlreadyCancelled = 92,
 }

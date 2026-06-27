@@ -185,7 +185,6 @@ impl FarmerRegistry {
             .has(&Self::farmer_key(&env, &wallet_address))
     }
 
-
     /// Toggle planter availability — planters can pause accepting new jobs
     /// without being penalised or removed from the registry.
     ///
@@ -202,7 +201,11 @@ impl FarmerRegistry {
         wallet_address.require_auth();
 
         // Planter must be registered before toggling availability.
-        if !env.storage().persistent().has(&Self::farmer_key(&env, &wallet_address)) {
+        if !env
+            .storage()
+            .persistent()
+            .has(&Self::farmer_key(&env, &wallet_address))
+        {
             panic!("farmer not registered");
         }
 
@@ -220,10 +223,7 @@ impl FarmerRegistry {
     /// `set_available` — availability is opt-out, not opt-in.
     pub fn is_available(env: Env, wallet_address: Address) -> bool {
         let key = Self::availability_key(&env, &wallet_address);
-        env.storage()
-            .persistent()
-            .get(&key)
-            .unwrap_or(true)
+        env.storage().persistent().get(&key).unwrap_or(true)
     }
 
     // ── internal ──────────────────────────────────────────────────────────────
@@ -505,14 +505,20 @@ mod tests {
         let farmer_a = Address::generate(&env);
         let farmer_b = Address::generate(&env);
 
-        client.register_farmer(&farmer_a, &land_hash(&env, 1), &String::from_str(&env, "s1"));
-        client.register_farmer(&farmer_b, &land_hash(&env, 2), &String::from_str(&env, "s2"));
+        client.register_farmer(
+            &farmer_a,
+            &land_hash(&env, 1),
+            &String::from_str(&env, "s1"),
+        );
+        client.register_farmer(
+            &farmer_b,
+            &land_hash(&env, 2),
+            &String::from_str(&env, "s2"),
+        );
 
         client.set_available(&farmer_a, &false);
 
         assert!(!client.is_available(&farmer_a));
         assert!(client.is_available(&farmer_b));
     }
-
-
 }
