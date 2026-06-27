@@ -10,6 +10,9 @@
 //!   • `verify_survival` releases the remaining 25% (Tranche 2) once the
 //!     ledger is ≥ 6 months past planting AND the survival rate ≥ threshold
 //!   • `refund` returns funds to the donor before planting is verified
+//!   • `verify_dead` / `request_replant` — once the admin attests a planted
+//!     tree dead, the sponsor triggers a free replant backed by the retained
+//!     escrow balance (Closes #489)
 //!
 //! ## Co-funded flow (keyed by tree_id) — Closes #402
 //!   • `register_tree` — admin opens a co-fundable tree escrow
@@ -48,6 +51,9 @@ const MAX_BATCH_SIZE: u32 = 50;
 pub enum EscrowStatus {
     Funded,
     Planted,
+    /// Planting was verified, but the tree was later attested dead by the admin.
+    /// The remaining escrow balance is retained to back a free replant.
+    Dead,
     Completed,
     Refunded,
 }
@@ -69,6 +75,10 @@ pub struct EscrowRecord {
     pub planting_proof: BytesN<32>,
     pub survival_proof: BytesN<32>,
     pub survival_rate_percent: u32,
+    /// Proof hash attesting the tree was found dead (zero until attested).
+    pub death_proof: BytesN<32>,
+    /// Number of free replants the sponsor has triggered for this escrow.
+    pub replant_count: u32,
 }
 
 /// A single slot in a batch deposit: one farmer address and the amount for that tree.
@@ -254,8 +264,10 @@ impl TreeEscrow {
                 status: EscrowStatus::Funded,
                 planted_at: 0,
                 planting_proof: empty_hash.clone(),
-                survival_proof: empty_hash,
+                survival_proof: empty_hash.clone(),
                 survival_rate_percent: 0,
+                death_proof: empty_hash,
+                replant_count: 0,
             },
         );
 
@@ -312,6 +324,8 @@ impl TreeEscrow {
                     planting_proof: empty_hash.clone(),
                     survival_proof: empty_hash.clone(),
                     survival_rate_percent: 0,
+                    death_proof: empty_hash.clone(),
+                    replant_count: 0,
                 },
             );
             env.events()
@@ -434,6 +448,71 @@ impl TreeEscrow {
 
         env.events()
             .publish((symbol_short!("survived"), farmer), tranche2);
+    }
+
+    /// Admin attests that a planted tree has died. Moves the escrow from
+    /// `Planted` to `Dead`, retaining the remaining (un-released) escrow
+    /// balance so the sponsor can fund a free replant. No tokens move here.
+    ///
+    /// Closes #489
+    pub fn verify_dead(env: Env, farmer: Address, death_proof: BytesN<32>) {
+        let (admin, _tree_token, _decimals) = Self::admin_tree(&env);
+        admin.require_auth();
+
+        let key = DataKey::Escrow(farmer.clone());
+        let mut rec: EscrowRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("no escrow for farmer");
+
+        if rec.status != EscrowStatus::Planted {
+            panic!("tree must be planted to be marked dead");
+        }
+        // A fully-released escrow keeps no balance to back a replant.
+        if rec.total_amount - rec.released <= 0 {
+            panic!("no escrow balance remains to fund a replant");
+        }
+
+        rec.status = EscrowStatus::Dead;
+        rec.death_proof = death_proof;
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("dead"), farmer), rec.replant_count);
+    }
+
+    /// Sponsor (original donor) requests a free replant for a tree previously
+    /// attested dead. The retained escrow balance backs the new planting, so
+    /// no new funds are required. The escrow returns to `Planted` with a fresh
+    /// 6-month survival clock; `verify_survival` then releases the remainder
+    /// once the replanted tree survives.
+    ///
+    /// Closes #489
+    pub fn request_replant(env: Env, farmer: Address) {
+        let key = DataKey::Escrow(farmer.clone());
+        let mut rec: EscrowRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("no escrow for farmer");
+
+        // Only the sponsor who funded the escrow may request a replant.
+        rec.donor.require_auth();
+
+        if rec.status != EscrowStatus::Dead {
+            panic!("tree is not marked dead");
+        }
+
+        rec.replant_count += 1;
+        rec.status = EscrowStatus::Planted;
+        rec.planted_at = env.ledger().timestamp();
+        rec.survival_rate_percent = 0;
+        rec.survival_proof = BytesN::from_array(&env, &[0; 32]);
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("replant"), farmer), rec.replant_count);
     }
 
     pub fn refund(env: Env, farmer: Address) {
@@ -1002,10 +1081,12 @@ mod tests {
             BatchSlot {
                 farmer: f1.clone(),
                 amount: 1_500,
+                gift_recipient: None,
             },
             BatchSlot {
                 farmer: f2.clone(),
                 amount: 2_500,
+                gift_recipient: None,
             },
         ];
         ctx.client.batch_deposit(&ctx.donor, &ctx.token, &slots);
@@ -1015,6 +1096,149 @@ mod tests {
         assert_eq!(r1.status, EscrowStatus::Funded);
         let r2 = ctx.client.get_record(&f2).unwrap();
         assert_eq!(r2.total_amount, 2_500);
+    }
+
+    // ── Dead tree replacement (#489) ──────────────────────────────────────────
+
+    /// Helper: deposit + verify planting, leaving the escrow in `Planted`.
+    fn deposit_and_plant(ctx: &Ctx) {
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42);
+        ctx.client
+            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &42);
+    }
+
+    #[test]
+    fn test_verify_dead_marks_escrow_dead_without_moving_funds() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+
+        let contract_balance_before = balance(&ctx.env, &ctx.token, &ctx.client.address);
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+
+        let rec = ctx.client.get_record(&ctx.farmer).unwrap();
+        assert_eq!(rec.status, EscrowStatus::Dead);
+        assert_eq!(rec.death_proof, proof(&ctx.env, 3));
+        assert_eq!(rec.replant_count, 0);
+        // The retained Tranche 2 balance (25%) stays in escrow.
+        assert_eq!(
+            balance(&ctx.env, &ctx.token, &ctx.client.address),
+            contract_balance_before
+        );
+        assert_eq!(rec.released, 7_500);
+    }
+
+    #[test]
+    #[should_panic(expected = "tree must be planted to be marked dead")]
+    fn test_verify_dead_rejected_before_planting() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42);
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+    }
+
+    #[test]
+    #[should_panic(expected = "tree must be planted to be marked dead")]
+    fn test_verify_dead_rejected_after_completion() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+        ctx.client
+            .verify_survival(&ctx.farmer, &proof(&ctx.env, 2), &80);
+        // Completed escrows keep no balance and cannot be marked dead.
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+    }
+
+    #[test]
+    fn test_request_replant_restarts_survival_cycle_for_free() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+
+        let donor_balance_after_plant = balance(&ctx.env, &ctx.token, &ctx.donor);
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+
+        // Advance time so we can prove the survival clock resets on replant.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+        ctx.client.request_replant(&ctx.farmer);
+
+        let rec = ctx.client.get_record(&ctx.farmer).unwrap();
+        assert_eq!(rec.status, EscrowStatus::Planted);
+        assert_eq!(rec.replant_count, 1);
+        assert_eq!(rec.planted_at, ctx.env.ledger().timestamp());
+        assert_eq!(rec.survival_rate_percent, 0);
+        // The sponsor paid nothing for the replant.
+        assert_eq!(
+            balance(&ctx.env, &ctx.token, &ctx.donor),
+            donor_balance_after_plant
+        );
+    }
+
+    #[test]
+    fn test_replanted_tree_releases_remainder_on_survival() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+        ctx.client.request_replant(&ctx.farmer);
+
+        let farmer_before = balance(&ctx.env, &ctx.token, &ctx.farmer);
+        // Six months must elapse from the *replant*, not the original planting.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+        ctx.client
+            .verify_survival(&ctx.farmer, &proof(&ctx.env, 2), &80);
+
+        let rec = ctx.client.get_record(&ctx.farmer).unwrap();
+        assert_eq!(rec.status, EscrowStatus::Completed);
+        assert_eq!(rec.released, 10_000);
+        // Remaining 25% is released to the farmer for the surviving replant.
+        assert_eq!(
+            balance(&ctx.env, &ctx.token, &ctx.farmer) - farmer_before,
+            2_500
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "6-month survival period not yet elapsed")]
+    fn test_replant_resets_survival_clock() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+        // Let the original 6 months nearly elapse before death.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS);
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+        ctx.client.request_replant(&ctx.farmer);
+        // Survival immediately after replant must fail: the clock restarted.
+        ctx.client
+            .verify_survival(&ctx.farmer, &proof(&ctx.env, 2), &80);
+    }
+
+    #[test]
+    fn test_repeated_death_and_replant() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 3));
+        ctx.client.request_replant(&ctx.farmer);
+        ctx.client.verify_dead(&ctx.farmer, &proof(&ctx.env, 4));
+        ctx.client.request_replant(&ctx.farmer);
+
+        let rec = ctx.client.get_record(&ctx.farmer).unwrap();
+        assert_eq!(rec.replant_count, 2);
+        assert_eq!(rec.status, EscrowStatus::Planted);
+    }
+
+    #[test]
+    #[should_panic(expected = "tree is not marked dead")]
+    fn test_request_replant_rejected_when_not_dead() {
+        let ctx = setup();
+        deposit_and_plant(&ctx);
+        ctx.client.request_replant(&ctx.farmer);
     }
 
     // ── Oracle survival reports (#394) ────────────────────────────────────────
