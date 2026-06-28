@@ -48,9 +48,7 @@ export const SPECIES_VOTING_CONTRACT_MAINNET = '' as const;
 
 export function getSpeciesVotingContract(network: NetworkType): string {
   const address =
-    network === 'mainnet'
-      ? SPECIES_VOTING_CONTRACT_MAINNET
-      : SPECIES_VOTING_CONTRACT_TESTNET;
+    network === 'mainnet' ? SPECIES_VOTING_CONTRACT_MAINNET : SPECIES_VOTING_CONTRACT_TESTNET;
   if (!address) {
     throw new Error('Species voting contract not deployed for this network');
   }
@@ -97,18 +95,10 @@ export async function buildProposeSpeciesTransaction(
     networkPassphrase,
   })
     .addOperation(
-      Operation.invokeHostFunction({
-        func: {
-          args: [
-            // Contract function args will go here
-          ],
-          auth: [],
-        },
-        hostFunction: {
-          type: 'invokeContract',
-          contractId: getSpeciesVotingContract(network),
-          functionName: 'propose_species',
-        },
+      Operation.invokeContractFunction({
+        contract: getSpeciesVotingContract(network),
+        function: 'propose_species',
+        args: [],
       })
     )
     .setTimeout(300)
@@ -146,16 +136,10 @@ export async function buildVoteTransaction(
     networkPassphrase,
   })
     .addOperation(
-      Operation.invokeHostFunction({
-        func: {
-          args: [],
-          auth: [],
-        },
-        hostFunction: {
-          type: 'invokeContract',
-          contractId: getSpeciesVotingContract(network),
-          functionName: 'vote',
-        },
+      Operation.invokeContractFunction({
+        contract: getSpeciesVotingContract(network),
+        function: 'vote',
+        args: [],
       })
     )
     .setTimeout(300)
@@ -191,16 +175,10 @@ export async function buildExecuteProposalTransaction(
     networkPassphrase,
   })
     .addOperation(
-      Operation.invokeHostFunction({
-        func: {
-          args: [],
-          auth: [],
-        },
-        hostFunction: {
-          type: 'invokeContract',
-          contractId: getSpeciesVotingContract(network),
-          functionName: 'execute_proposal',
-        },
+      Operation.invokeContractFunction({
+        contract: getSpeciesVotingContract(network),
+        function: 'execute_proposal',
+        args: [],
       })
     )
     .setTimeout(300)
@@ -236,12 +214,12 @@ export function isVotingActive(votingEndsAt: number): boolean {
 export function formatVotingTimeRemaining(votingEndsAt: number): string {
   const now = Date.now() / 1000;
   const remaining = votingEndsAt - now;
-  
+
   if (remaining <= 0) return 'Voting ended';
-  
- const days = Math.floor(remaining / 86400);
+
+  const days = Math.floor(remaining / 86400);
   const hours = Math.floor((remaining % 86400) / 3600);
-  
+
   if (days > 0) return `${days} day${days > 1 ? 's' : ''} remaining`;
   if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} remaining`;
   return 'Less than 1 hour remaining';

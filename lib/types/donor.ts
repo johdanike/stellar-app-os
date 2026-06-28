@@ -1,6 +1,8 @@
 import type { GiftDetails } from '@/lib/types/gift';
 import { DEFAULT_GIFT_DETAILS } from '@/lib/types/gift';
 
+export type { GiftDetails };
+
 export interface RegionAllocation {
   regionId: string;
   treeCount: number;
