@@ -20,12 +20,12 @@ import { getTreeById } from '@/lib/api/tree-registry';
 export const runtime = 'nodejs';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (!id || id.trim() === '') {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
