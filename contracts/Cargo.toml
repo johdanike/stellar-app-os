@@ -16,6 +16,7 @@ members = [
     "kyc-attestation",
     "species-registry",
     "subscription-sponsorship",
+    "planting-bond",
 ]
 resolver = "2"
 
