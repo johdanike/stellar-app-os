@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Footer } from '@/components/organisms/Footer/Footer';
+import { ToastProvider } from '@/contexts/ToastContext';
+import { ToastContainer } from '@/components/ui/toast';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -10,7 +12,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'FarmCredit',
-  description: 'FarmCredit - Decentralized agricultural credit on Stellar',
+  description: 'Decentralized agricultural credit on Stellar',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -55,7 +57,10 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
+        <ToastProvider>
+          {children}
+          <ToastContainer />
+        </ToastProvider>
         <Footer />
       </body>
     </html>

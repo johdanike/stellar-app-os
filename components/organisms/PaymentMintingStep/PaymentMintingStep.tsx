@@ -14,6 +14,7 @@ import { useWalletContext } from '@/contexts/WalletContext';
 import { signTransactionWithFreighter, signTransactionWithAlbedo } from '@/lib/stellar/signing';
 import { mockCarbonProjects } from '@/lib/api/mock/carbonProjects';
 import type { PaymentMintingProps, TransactionStatus } from '@/lib/types/payment';
+import { useToast } from '@/contexts/ToastContext';
 
 export function PaymentMintingStep({
   selection,
@@ -22,6 +23,7 @@ export function PaymentMintingStep({
   onError,
 }: PaymentMintingProps) {
   const { refreshBalance } = useWalletContext();
+  const { toast } = useToast();
   const [status, setStatus] = useState<TransactionStatus>('idle');
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +103,11 @@ export function PaymentMintingStep({
       setTransactionHash(hash);
       setStatus('confirming');
 
+      toast.info(
+        'Transaction Submitted',
+        'Your payment transaction has been submitted to the Stellar network and is being confirmed.'
+      );
+
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       setStatus('success');
@@ -119,7 +126,7 @@ export function PaymentMintingStep({
     } finally {
       setIsProcessing(false);
     }
-  }, [selection, wallet, generateIdempotencyKey, refreshBalance, onComplete, onError]);
+  }, [selection, wallet, generateIdempotencyKey, refreshBalance, onComplete, onError, toast]);
 
   const canProceed =
     wallet?.isConnected &&
