@@ -3,6 +3,7 @@ members = [
     "contract-utils",
     "shared",
     "planter-registry",
+    "planter-blacklist",
     "escrow",
     "nullifier-registry",
     "escrow-milestone",
