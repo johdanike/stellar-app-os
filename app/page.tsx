@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { type JSX, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
 import { Counter } from '@/components/atoms/Counter';
