@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "contract-utils",
+    "carbon-marketplace",
     "escrow",
     "nullifier-registry",
     "escrow-milestone",
@@ -8,14 +9,19 @@ members = [
     "farmer-registry",
     "donation-escrow",
     "zk-location-verifier",
+    "zk-verifier",
     "location-proof",
     "naira-payout",
+    "harvesta-errors",
     "aggregate-impact-verifier",
     "tree-token",
+    "treasury",
     "admin-controls",
     "kyc-attestation",
     "species-registry",
+    "species-voting",
     "subscription-sponsorship",
+    "verifier-staking",
 ]
 resolver = "2"
 
