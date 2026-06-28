@@ -17,7 +17,13 @@ import type { WalletType, NetworkType, WalletConnectionProps } from '@/lib/types
 
 const FREIGHTER_INSTALL_URL = 'https://freighter.app';
 
-export function WalletConnectionStep({ onConnectionChange }: WalletConnectionProps) {
+export function WalletConnectionStep({
+  onConnectionChange,
+  title = 'Connect Your Wallet',
+  description = 'Choose a wallet to connect and start purchasing carbon credits.',
+  connectedTitle = 'Wallet Connected',
+  connectedDescription = 'Your wallet is connected and ready for transactions.',
+}: WalletConnectionProps) {
   const { wallet, connect, disconnect, switchNetwork, refreshBalance, isLoading, error } =
     useWalletContext();
 
@@ -69,10 +75,10 @@ export function WalletConnectionStep({ onConnectionChange }: WalletConnectionPro
       <div className="space-y-6">
         <div>
           <Text variant="h3" as="h2" className="mb-2">
-            Wallet Connected
+            {connectedTitle}
           </Text>
           <Text variant="muted" as="p">
-            Your wallet is connected and ready for transactions.
+            {connectedDescription}
           </Text>
         </div>
 
@@ -207,10 +213,10 @@ export function WalletConnectionStep({ onConnectionChange }: WalletConnectionPro
     <div className="space-y-6">
       <div>
         <Text variant="h3" as="h2" className="mb-2">
-          Connect Your Wallet
+          {title}
         </Text>
         <Text variant="muted" as="p">
-          Choose a wallet to connect and start purchasing carbon credits.
+          {description}
         </Text>
       </div>
 

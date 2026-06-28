@@ -6,6 +6,7 @@
 export interface AnalyticsEvent {
   event: string;
   properties?: Record<string, unknown>;
+  timestamp?: number;
 }
 
 /**
@@ -13,12 +14,18 @@ export interface AnalyticsEvent {
  * @param event - Event name
  * @param properties - Optional event properties
  */
-export function trackEvent(): void {
+export function trackEvent(event: string, properties?: Record<string, unknown>): void {
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
+    const analyticsEvent: AnalyticsEvent = {
+      event,
+      properties,
+      timestamp: Date.now(),
+    };
+
     // In a production environment, this would send to your analytics service
     // For now, we'll log to console and could integrate with services like:
     // - Google Analytics
@@ -29,6 +36,7 @@ export function trackEvent(): void {
 
     // Log to console for development
     if (process.env.NODE_ENV === 'development') {
+      console.log('[Analytics]', analyticsEvent);
     }
 
     // Example: Send to analytics service
@@ -40,7 +48,7 @@ export function trackEvent(): void {
     // fetch("/api/analytics", {
     //   method: "POST",
     //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify(analyticsEvent),
+    //   body: JSON.stringify({ event, properties }),
     // }).catch(console.error);
   } catch (error) {
     // Silently fail analytics tracking to not break user experience
