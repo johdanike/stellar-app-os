@@ -15,8 +15,11 @@ members = [
     "admin-controls",
     "kyc-attestation",
     "species-registry",
+    "species-voting",
+    "treasury",
+    "platform-governance",
     "subscription-sponsorship",
-    "planting-bond",
+    "planter-registry",
 ]
 resolver = "2"
 
