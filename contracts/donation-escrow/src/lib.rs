@@ -178,15 +178,15 @@ impl DonationEscrow {
                 panic_with_error!(&env, HarvestaError::AlreadyProcessed);
             }
 
+            // CEI: update state before external transfer to prevent reentrancy.
+            rec.status = DonationStatus::Released;
+            env.storage().persistent().set(&key, &rec);
+
             token::Client::new(&env, &rec.token).transfer(
                 &env.current_contract_address(),
                 &destination,
                 &rec.amount,
             );
-
-            rec.status = DonationStatus::Released;
-
-            env.storage().persistent().set(&key, &rec);
 
             env.events()
                 .publish((symbol_short!("release"), seq), rec.amount);
@@ -209,15 +209,15 @@ impl DonationEscrow {
             panic_with_error!(&env, HarvestaError::AlreadyProcessed);
         }
 
+        // CEI: update state before external transfer to prevent reentrancy.
+        rec.status = DonationStatus::Refunded;
+        env.storage().persistent().set(&key, &rec);
+
         token::Client::new(&env, &rec.token).transfer(
             &env.current_contract_address(),
             &rec.donor,
             &rec.amount,
         );
-
-        rec.status = DonationStatus::Refunded;
-
-        env.storage().persistent().set(&key, &rec);
 
         env.events()
             .publish((symbol_short!("refund"), seq), rec.amount);
@@ -332,16 +332,16 @@ impl DonationEscrow {
             .get(&Self::project_key(&env, rec.project_id))
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ProjectNotRegistered));
 
+        // CEI: update state before external transfer to prevent reentrancy.
+        rec.next_release = rec.next_release.checked_add(rec.interval_seconds).expect("next release time overflow");
+        rec.total_released = rec.total_released.checked_add(rec.amount_per_interval).expect("total released overflow");
+        env.storage().persistent().set(&key, &rec);
+
         token::Client::new(&env, &rec.token).transfer(
             &env.current_contract_address(),
             &project,
             &rec.amount_per_interval,
         );
-
-        rec.next_release = rec.next_release.checked_add(rec.interval_seconds).expect("next release time overflow");
-        rec.total_released = rec.total_released.checked_add(rec.amount_per_interval).expect("total released overflow");
-
-        env.storage().persistent().set(&key, &rec);
 
         env.events().publish(
             (symbol_short!("donation"), symbol_short!("rec_proc")),
@@ -374,7 +374,9 @@ impl DonationEscrow {
             panic_with_error!(&env, HarvestaError::DonationAlreadyCancelled);
         }
 
+        // CEI: persist cancellation before external transfer.
         rec.cancelled = true;
+        env.storage().persistent().set(&key, &rec);
 
         // Refund the locked (unreleased) interval amount back to donor
         token::Client::new(&env, &rec.token).transfer(
@@ -382,8 +384,6 @@ impl DonationEscrow {
             &donor,
             &rec.amount_per_interval,
         );
-
-        env.storage().persistent().set(&key, &rec);
 
         env.events().publish(
             (symbol_short!("donation"), symbol_short!("rec_cncl")),

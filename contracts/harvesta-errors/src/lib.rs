@@ -93,7 +93,7 @@ pub enum HarvestaError {
     // ── KYC attestation (61) ──────────────────────────────────────────────────
     NotVerifier = 61,
 
-    // ── Species registry (62–64) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 82) ─────────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
@@ -121,6 +121,9 @@ pub enum HarvestaError {
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
 
+    // ── Species registry extension (82) — closes #484 ─────────────────────────
+    GrowthRateMustBePositive = 82,
+
     // ── Verifier staking (91–95) ──────────────────────────────────────────────
     MinStakeMustBePositive = 91,
     VerifierAlreadyStaked = 92,
@@ -136,4 +139,8 @@ pub enum HarvestaError {
     BuyAmountMustBePositive = 105,
     InsufficientLiquidity = 106,
     SelfTrade = 107,
+
+    // ── Corporate bulk sponsorship (108–109) — closes #487 ────────────────────
+    CorpBatchEmpty = 108,
+    CorpBatchTooLarge = 109,
 }
