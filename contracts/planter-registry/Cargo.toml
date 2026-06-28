@@ -4,19 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
-contract-utils = { path = "../contract-utils" }
-shared = { path = "../shared" }
-harvesta-errors = { path = "../harvesta-errors" }
-soroban-sdk = { version = "21.7.7", features = ["alloc"] }
+soroban-sdk = { version = "21.0.0", features = ["alloc"] }
 
 [dev-dependencies]
-contract-utils = { path = "../contract-utils" }
-shared = { path = "../shared" }
-harvesta-errors = { path = "../harvesta-errors" }
-soroban-sdk = { version = "21.7.7", features = ["testutils", "alloc"] }
+soroban-sdk = { version = "21.0.0", features = ["testutils", "alloc"] }
 
 [profile.release]
 opt-level = "z"
