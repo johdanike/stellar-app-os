@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "contract-utils",
+    "shared",
     "escrow",
     "nullifier-registry",
     "escrow-milestone",
