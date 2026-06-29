@@ -1,22 +1,8 @@
 'use client';
-
-import { useState, useEffect } from 'react';
-import { useWalletContext } from '@/contexts/WalletContext';
-import { fetchLeaderboard, getMockUserStats } from '@/lib/api/mock/leaderboard';
 import { type LeaderboardSponsor, type LeaderboardPeriod } from '@/lib/types/leaderboard';
 import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
-<<<<<<< HEAD
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from '@/components/molecules/Card';
-=======
 import { Card, CardContent } from '@/components/molecules/Card';
->>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 import {
   Table,
   TableHeader,

@@ -1,59 +1,16 @@
 'use client';
-
-/**
- * ProposalList — Species voting dashboard (#663)
- *
- * Displays active proposals with:
- *  - Species details (name, slug, CO₂ sequestration, maturity)
- *  - Vote percentages rendered with Progress bar
- *  - Remaining campaign timeline
- *  - Vote buttons that trigger wallet signature (pending → confirmed / failed)
- */
-
-import { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-<<<<<<< HEAD
-=======
 import { Alert, AlertDescription } from '@/components/ui/alert';
->>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 import {
   ProposalStatus,
   formatVotingTimeRemaining,
   calculateVotePercentage,
-<<<<<<< HEAD
-} from '@/lib/stellar/species-voting';
-import { ThumbsUp, ThumbsDown, Clock, CheckCircle2, XCircle, PlayCircle } from 'lucide-react';
-=======
   buildVoteTransaction,
   buildExecuteProposalTransaction,
   type ProposalRecord,
 } from '@/lib/stellar/species-voting';
-import { useWalletContext } from '@/contexts/WalletContext';
-import {
-  ThumbsUp,
-  ThumbsDown,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  PlayCircle,
-  Loader2,
-  AlertCircle,
-  Leaf,
-  TreePine,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
->>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
-
+import { ThumbsUp, ThumbsDown, Clock, CheckCircle2, XCircle, PlayCircle } from 'lucide-react';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 type VoteState =

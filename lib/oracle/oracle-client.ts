@@ -1,11 +1,7 @@
 import { hexToBytes } from '@noble/hashes/utils';
 import { ed25519 } from '@noble/curves/ed25519';
-<<<<<<< HEAD
-=======
 import { invokeSurvivalVerification } from '@/lib/stellar/survival-verifier-client';
->>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 import type { NdviSubmissionRequest, NdviSubmissionResponse } from '@/lib/types/oracle';
-
 /**
  * Verify an ed25519 signature using the configured oracle public key.
  *
