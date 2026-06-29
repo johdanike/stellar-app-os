@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
 import { Counter } from '@/components/atoms/Counter';
 import { OnboardingTour } from '@/components/organisms/OnboardingTour/OnboardingTour';
+import { LandingHero } from '@/components/organisms/LandingHero';
 import SocialShareButtons from '@/components/SocialShareButtons';
 import {
   Card,

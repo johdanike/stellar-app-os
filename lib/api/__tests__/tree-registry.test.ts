@@ -13,6 +13,7 @@ import { cacheGet, cacheSet, cacheClear } from '@/lib/api/tree-registry-cache';
 import { getTreeList, getTreeById } from '@/lib/api/tree-registry';
 
 // ── mock the heavy imports that are irrelevant to unit tests ──────────────────
+import { vi } from 'vitest';
 
 vi.mock('@stellar/stellar-sdk', () => ({
   Horizon: {

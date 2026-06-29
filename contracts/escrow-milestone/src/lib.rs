@@ -184,7 +184,7 @@ impl EscrowMilestone {
         approver.require_auth();
 
         if completion_pct > 100 {
-            panic_with_error!(&env, HarvestaError::CompletionPercentageOutOfRange);
+            panic_with_error!(&env, HarvestaError::CompletionPercentOutOfRange);
         }
 
         let key = Self::escrow_key(&env, &milestone_id);
@@ -197,7 +197,7 @@ impl EscrowMilestone {
         let payout = (state.total_amount * completion_pct as i128) / 100;
 
         if state.released + payout > state.total_amount {
-            panic_with_error!(&env, HarvestaError::TotalReleasedExceedsMilestone);
+            panic_with_error!(&env, HarvestaError::TotalReleasedExceedsMile);
         }
 
         token::Client::new(&env, &state.token).transfer(

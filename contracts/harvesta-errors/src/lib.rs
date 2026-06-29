@@ -23,39 +23,17 @@ pub enum HarvestaError {
     AlreadyPaused = 5,
     NotPaused = 6,
     NoPendingAdmin = 7,
-    ContractMustBeTreeTokenAdmin = 8,
+    ContractMustBeTreeTokenAdm = 8,
 
     // ── Amount / value validation (9–15) ──────────────────────────────────────
     AmountMustBePositive = 9,
     TreeCountMustBePositive = 10,
     VerifiedCountMustBePositive = 11,
-    VerifiedCountExceedsDonation = 12,
+    VerifiedCountExceedsDon = 12,
     InvalidPayoutAmount = 13,
     BurnAmountMustBePositive = 14,
     SlotAmountMustBePositive = 15,
 
-    // ── Escrow state (16–25) ──────────────────────────────────────────────────
-    // EscrowAlreadyExists = 16,
-    // EscrowNotFound = 17,
-    // PlantingAlreadyVerified = 18,
-    // PlantingNotVerified = 19,
-    // RefundAfterPlanting = 20,
-    // SurvivalThresholdOutOfRange = 21,
-    // SurvivalRateOutOfRange = 22,
-    // SurvivalRateBelowMinimum = 23,
-    // SurvivalPeriodNotElapsed = 24,
-    // NothingToRelease = 25,
-
-    // ── Oracle / tree co-fund (26–34) ─────────────────────────────────────────
-    // UnauthorizedOracle = 26,
-    // NoOracleReport = 27,
-    // BatchEmpty = 28,
-    // BatchTooLarge = 29,
-    // TreeAlreadyRegistered = 30,
-    // TreeNotRegistered = 31,
-    // TreeNotOpenForContributions = 32,
-    // TreeNotOpenForRelease = 33,
-    // NoFundsToRelease = 34,
 
     // ── Farmer registry (35–37, 67-68) ───────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
@@ -66,32 +44,18 @@ pub enum HarvestaError {
     /// The SHA-256 hash supplied by the caller does not match the one stored
     /// on-chain for this farmer's identity document.
     HashMismatch = 68,
-
-
     // ── Farm Plots (150–151) ──────────────────────────────────────────────
     InvalidCoordinatesCount = 150,
     PlotAlreadyExists = 151,
 
-
-    // ── Dispute / arbiter (38–46) ─────────────────────────────────────────────
-    // DisputeAlreadyOpen = 38,
-    // NoOpenDispute = 39,
-    // EscrowAlreadyFinalised = 40,
-    // NotArbiter = 41,
-    // NotBuyerOrSeller = 42,
-    // MilestoneReleaseBlocked = 43,
-    // MilestoneAlreadyProcessed = 44,
-    // CompletionPercentageOutOfRange = 45,
-    // TotalReleasedExceedsMilestone = 46,
-
-    // ── Species registry (62–66) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 69-70) ──────────────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
-    InvasiveSpecies = 65,
-    HighWaterUse = 66,
+    InvasiveSpecies = 69,
+    HighWaterUse = 70,
 
-    // ── Carbon marketplace (100–107) ───────────────────────────────────────────
+    // ── Carbon marketplace (100–113) ───────────────────────────────────────────
     ListingAmountMustBePositive = 100,
     PriceMustBePositive = 101,
     ListingNotFound = 102,
@@ -107,7 +71,7 @@ pub enum HarvestaError {
     AuctionExpired = 112,
     BidBelowReservePrice = 113,
 
-    // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
-    TreeTokenMintOverflow = 80,
-    TokenUnitOverflow = 81,
+    // ── Arithmetic overflows (86–87) ──────────────────────────────────────────
+    TreeTokenMintOverflow = 86,
+    TokenUnitOverflow = 87,
 }

@@ -264,7 +264,7 @@ impl TreeEscrow {
         if token::StellarAssetClient::new(&env, &tree_token).admin()
             != env.current_contract_address()
         {
-            panic_with_error!(&env, HarvestaError::ContractMustBeTreeTokenAdmin);
+            panic_with_error!(&env, HarvestaError::ContractMustBeTreeTokenAdm);
         }
 
         let tree_decimals = token::Client::new(&env, &tree_token).decimals();
