@@ -17,6 +17,7 @@ import {
 import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal';
 import { useToast } from '@/hooks/useToast';
 import { useAppTranslation } from '@/hooks/useTranslation';
+import { LandingHero } from '@/components/organisms/LandingHero';
 
 export default function HomePage(): JSX.Element {
   const [showTx, setShowTx] = useState(false);

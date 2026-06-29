@@ -117,6 +117,17 @@ export function MyForestDashboard({ initialFilters }: MyForestDashboardProps) {
     Moringa: '#10b981',
     Eucalyptus: '#14b8a6',
     Mangrove: '#06b6d4',
+    Acacia: '#84cc16',
+    Neem: '#22c55e',
+    'African Mahogany': '#a16207',
+    Baobab: '#d97706',
+    'Bamboo (Moso)': '#4ade80',
+    'West African Cedar': '#15803d',
+    'Caribbean Pine': '#166534',
+    Iroko: '#854d0e',
+    Shea: '#ca8a04',
+    Cashew: '#f97316',
+    'African Locust Bean': '#78350f',
   };
 
   const speciesTotal = speciesBreakdown.reduce((s, [, c]) => s + c, 0);
