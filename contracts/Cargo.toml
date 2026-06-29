@@ -13,6 +13,7 @@ members = [
     "aggregate-impact-verifier",
     "tree-token",
     "admin-controls",
+    "carbon-credits",
     "kyc-attestation",
     "species-registry",
     "species-voting",
@@ -21,6 +22,8 @@ members = [
     "subscription-sponsorship",
     "planter-registry",
     "nft-certificate",
+    "sponsor-receipt",
+    "tree-registry",
 ]
 resolver = "2"
 
