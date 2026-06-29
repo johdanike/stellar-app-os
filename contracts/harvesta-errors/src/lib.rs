@@ -8,6 +8,7 @@
 //! * `HarvestaError` — lifecycle, validation, registry, ZK, and escrow errors
 //! * `GovernanceError` — multi-signature governance (admin-controls only)
 //! * `MarketplaceError` — carbon marketplace / auction (carbon-marketplace only)
+//! * `DonationEscrowError` — donation escrow and recurring donations (donation-escrow only)
 
 use soroban_sdk::contracterror;
 
@@ -91,6 +92,24 @@ pub enum GovernanceError {
     SignerAlreadyExists = 89,
     SignerNotFound = 90,
     MinimumOneSignerRequired = 91,
+}
+
+/// Donation escrow errors — used by donation-escrow only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum DonationEscrowError {
+    UnsupportedToken = 71,
+    EscrowNotFound = 72,
+    AlreadyProcessed = 73,
+    DonationCancelled = 74,
+    IntervalNotElapsed = 75,
+    RecurringDonationNotFound = 76,
+    ProjectNotRegistered = 77,
+    NotDonor = 78,
+    DonationAlreadyCancelled = 79,
+    AmountPerIntervalMustBePos = 80,
+    IntervalSecondsMustBePos = 81,
 }
 
 /// Carbon marketplace / auction errors — used by carbon-marketplace only.
