@@ -19,6 +19,7 @@ export function useTreeStatus(options: UseTreeStatusOptions = {}): UseTreeStatus
   const [error, setError] = useState<Event | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const onEventRef = useRef(options.onEvent);
+  onEventRef.current = options.onEvent; // <-- ESLint hates this
   onEventRef.current = options.onEvent;
 
   useEffect(() => {
@@ -50,5 +51,7 @@ export function useTreeStatus(options: UseTreeStatusOptions = {}): UseTreeStatus
 
   const clearEvents = useCallback(() => setEvents([]), []);
 
-  return { events, isConnected, error, clearEvents } as UseTreeStatusReturn & { clearEvents: () => void };
+  return { events, isConnected, error, clearEvents } as UseTreeStatusReturn & {
+    clearEvents: () => void;
+  };
 }

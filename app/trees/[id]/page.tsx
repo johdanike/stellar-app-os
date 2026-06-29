@@ -6,11 +6,7 @@ export async function generateStaticParams() {
   return getMockTrees().map((tree) => ({ id: tree.id }));
 }
 
-export default async function TreeDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function TreeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const tree = getMockTrees().find((t) => t.id === id || t.treeId === id);
 
