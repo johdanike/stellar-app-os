@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { TreeDetail } from '@/components/organisms/TreeDetail/TreeDetail';
 import { getMockTrees } from '@/lib/api/mock/trees';
 
-export async function generateStaticParams() {
+export function generateStaticParams() {
   return getMockTrees().map((tree) => ({ id: tree.id }));
 }
 

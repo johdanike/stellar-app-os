@@ -8,7 +8,7 @@ import { Input } from '@/components/atoms/Input';
 import { Badge } from '@/components/atoms/Badge';
 import { ProgressStepper } from '@/components/molecules/ProgressStepper/ProgressStepper';
 import { useDonationContext } from '@/contexts/DonationContext';
-import { Trees, Mountain, Leaf, Sprout, Plus, Minus } from 'lucide-react';
+import { Trees, Mountain, Leaf, Sprout, Minus } from 'lucide-react';
 import {
   MINIMUM_DONATION,
   TREES_PER_DOLLAR,

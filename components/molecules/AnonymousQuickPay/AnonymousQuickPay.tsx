@@ -7,7 +7,6 @@ import { Text } from '@/components/atoms/Text';
 import { Input } from '@/components/atoms/Input';
 import { Select } from '@/components/atoms/Select';
 import { Badge } from '@/components/atoms/Badge';
-import { LoadingSpinner } from '@/components/atoms/LoadingSpinner/LoadingSpinner';
 import { StripePaymentForm } from '@/components/molecules/StripePaymentForm/StripePaymentForm';
 import {
   formatCurrency,

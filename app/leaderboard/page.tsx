@@ -6,6 +6,7 @@ import { fetchLeaderboard, getMockUserStats } from '@/lib/api/mock/leaderboard';
 import { type LeaderboardSponsor, type LeaderboardPeriod } from '@/lib/types/leaderboard';
 import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
+<<<<<<< HEAD
 import {
   Card,
   CardHeader,
@@ -13,6 +14,9 @@ import {
   CardDescription,
   CardContent,
 } from '@/components/molecules/Card';
+=======
+import { Card, CardContent } from '@/components/molecules/Card';
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 import {
   Table,
   TableHeader,
@@ -41,7 +45,7 @@ function formatAddress(address: string) {
 
 export default function LeaderboardPage() {
   const { wallet } = useWalletContext() || { wallet: null };
-  const isConnected = !!wallet?.isConnected;
+  const _isConnected = !!wallet?.isConnected;
   const [period, setPeriod] = useState<LeaderboardPeriod>('monthly');
   const [sponsors, setSponsors] = useState<LeaderboardSponsor[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,7 +71,7 @@ export default function LeaderboardPage() {
   // User details
   const userAddress = wallet?.publicKey || '';
   const userStats = userAddress ? getMockUserStats(userAddress, period) : null;
-  const isUserInTop10 = userStats
+  const _isUserInTop10 = userStats
     ? sponsors.some((s) => s.address.toLowerCase() === userAddress.toLowerCase())
     : false;
 

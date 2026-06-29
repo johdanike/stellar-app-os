@@ -5,7 +5,12 @@ import { uploadImageToS3 } from '@/lib/aws/s3';
 import { encryptGpsCoordinates } from '@/lib/zk/locationProof';
 import { sendPhotoUploadedEmail } from '@/lib/email/sendgrid';
 import { getPool } from '@/lib/db/client';
+<<<<<<< HEAD
 import { encodeGeohash, buildRegionHash } from '@/lib/geo/geohash';
+=======
+import { encodeGeohash } from '@/lib/geo/geohash';
+import { buildRegionHash } from '@/lib/geo/regionHash';
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 
 // Maximum allowable distance (in meters) between Exif GPS and farmer-submitted GPS.
 const MAX_DISTANCE_METERS = 500;

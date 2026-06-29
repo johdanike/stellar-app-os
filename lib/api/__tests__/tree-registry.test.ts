@@ -6,6 +6,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { cacheGet, cacheSet, cacheClear } from '@/lib/api/tree-registry-cache';
 import { getTreeList, getTreeById } from '@/lib/api/tree-registry';
 
+<<<<<<< HEAD
 // ── mock the heavy imports ────────────────────────────────────────────────
 
 // Find the Horizon mock and update it to:
@@ -28,6 +29,23 @@ vi.mock('@stellar/stellar-sdk', () => ({
           })),
         })),
       })),
+=======
+// ── mock the heavy imports that are irrelevant to unit tests ──────────────────
+import { vi } from 'vitest';
+
+vi.mock('@stellar/stellar-sdk', () => ({
+  Horizon: {
+    Server: vi.fn().mockImplementation(() => ({
+      payments: vi.fn().mockReturnValue({
+        forAccount: vi.fn().mockReturnValue({
+          limit: vi.fn().mockReturnValue({
+            order: vi.fn().mockReturnValue({
+              call: vi.fn().mockResolvedValue({ records: [] }),
+            }),
+          }),
+        }),
+      }),
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
     })),
   },
 }));
@@ -64,7 +82,11 @@ describe('tree-registry-cache', () => {
   it('returns null after TTL has passed', () => {
     vi.useFakeTimers();
     cacheSet('ttl-test', 'value');
+<<<<<<< HEAD
     vi.advanceTimersByTime(31_000);
+=======
+    vi.advanceTimersByTime(31_000); // 31s > 30s TTL
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
     expect(cacheGet('ttl-test')).toBeNull();
     vi.useRealTimers();
   });
@@ -130,7 +152,19 @@ describe('getTreeList', () => {
     const result = await getTreeList({ search: 'Mangrove' });
     console.log('Trees found:', JSON.stringify(result.trees, null, 2)); // Add this
     expect(result.trees.length).toBeGreaterThan(0);
+<<<<<<< HEAD
     // ...
+=======
+    // All results must contain 'mangrove' somewhere in their searchable fields
+    expect(
+      result.trees.every((t) =>
+        [t.treeId, t.species, t.region, t.status, t.projectName]
+          .join(' ')
+          .toLowerCase()
+          .includes('mangrove')
+      )
+    ).toBe(true);
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
   });
 });
 

@@ -1,11 +1,16 @@
 /**
  * Unit tests for GET /api/impact/:sponsor — Issue #545
  */
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { cacheClear } from '@/lib/api/tree-registry-cache';
 import { getSponsorImpact, isValidStellarAddress } from '@/lib/api/carbon-impact';
 
 // ── mock heavy stellar imports ────────────────────────────────────────────────
+import { vi } from 'vitest';
 
 vi.mock('@/lib/stellar/tree-asset', () => ({
   CO2_KG_PER_TREE: 48,
@@ -22,8 +27,14 @@ vi.mock('@/lib/config/network', () => ({
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+<<<<<<< HEAD
 const VALID_ADDRESS = 'GCM6QMP3DLRPTJZSYHBPRROZEWEA4PTYGWZGPRBURUZNPZMACEE3VYJB';
 const VALID_ADDRESS_2 = 'GA2C5RFPE6GCKIG3EQVCD52W7Z6K3M6XY4VHQ5C6XG5I63K2X4444444';
+=======
+/** A valid 56-char Stellar public key for tests (base32: A-Z2-7 only) */
+const VALID_ADDRESS = 'GYNCXMBWLAVK7UJ6TI5SH4RG3QF2PEZODYNCXMBWLAVK7UJ6TI5SH4RG';
+const VALID_ADDRESS_2 = 'GUFWHYJ2L4N6PARCTEVGXIZK3M5O7QBSDUFWHYJ2L4N6PARCTEVGXIZK';
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 
 beforeEach(() => cacheClear());
 

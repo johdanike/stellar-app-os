@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Info } from 'lucide-react';
 
@@ -43,12 +42,16 @@ export function CreateProposalForm() {
       }
 
       // TODO: Submit proposal transaction
-      console.log('Submitting proposal:', {
+
+      console.info('Submitting proposal:', {
         slug: formData.slug,
         name: formData.name,
         co2_scaled,
         maturity_years,
       });
+
+      // Simulate async operation
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Reset form on success
       setFormData({
@@ -133,7 +136,9 @@ export function CreateProposalForm() {
           id="description"
           placeholder="Additional context about this species..."
           value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+            setFormData({ ...formData, description: e.target.value })
+          }
           rows={3}
         />
       </div>
