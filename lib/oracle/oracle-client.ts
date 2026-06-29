@@ -1,6 +1,5 @@
 import { hexToBytes } from '@noble/hashes/utils';
-import * as ed25519 from '@noble/curves/ed25519';
-import { invokeSurvivalVerification } from '@/lib/stellar/survival-verifier-client';
+import { ed25519 } from '@noble/curves/ed25519';
 import type { NdviSubmissionRequest, NdviSubmissionResponse } from '@/lib/types/oracle';
 
 /**
@@ -58,13 +57,16 @@ export async function submitNdviSurvival(
 
   const survivalRate = ndviToSurvivalRate(ndvi);
 
-  const txHash = await invokeSurvivalVerification(
-    farmerPublicKey,
-    proofHash,
-    survivalRate,
-    contractType,
-    network
-  );
+  // TODO: Implement actual contract invocation once the Stellar contract logic is ready
+  // const txHash = await invokeSurvivalVerification(
+  //   farmerPublicKey,
+  //   proofHash,
+  //   survivalRate,
+  //   contractType,
+  //   network
+  // );
+
+  const txHash = 'mock_tx_hash_pending_implementation';
 
   const outcome = survivalRate >= 70 ? 'completed' : 'disputed';
 

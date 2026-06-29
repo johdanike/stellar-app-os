@@ -48,9 +48,7 @@ export const SPECIES_VOTING_CONTRACT_MAINNET = '' as const;
 
 export function getSpeciesVotingContract(network: NetworkType): string {
   const address =
-    network === 'mainnet'
-      ? SPECIES_VOTING_CONTRACT_MAINNET
-      : SPECIES_VOTING_CONTRACT_TESTNET;
+    network === 'mainnet' ? SPECIES_VOTING_CONTRACT_MAINNET : SPECIES_VOTING_CONTRACT_TESTNET;
   if (!address) {
     throw new Error('Species voting contract not deployed for this network');
   }
@@ -61,15 +59,6 @@ export function getSpeciesVotingContract(network: NetworkType): string {
 
 /**
  * Build a transaction to propose a new species.
- *
- * @param proposerPublicKey - Wallet address proposing the species
- * @param slug - Short identifier (e.g., "mahogany")
- * @param name - Human-readable name
- * @param co2_scaled - kg CO₂/year × 100
- * @param maturity_years - Years to biomass maturity
- * @param network - "testnet" | "mainnet"
- *
- * @returns Unsigned transaction XDR ready for signing
  */
 export async function buildProposeSpeciesTransaction(
   proposerPublicKey: string,
@@ -90,25 +79,15 @@ export async function buildProposeSpeciesTransaction(
   const proposerAccount = await server.loadAccount(proposerPublicKey);
   const networkPassphrase = networkConfig.networkPassphrase;
 
-  // TODO: Replace with actual Soroban contract invocation
-  // This is a placeholder - actual implementation will use soroban-sdk
+  // TODO: Replace with actual Soroban contract invocation using xdr.HostFunction
   const transaction = new TransactionBuilder(proposerAccount, {
     fee: BASE_FEE,
     networkPassphrase,
   })
     .addOperation(
       Operation.invokeHostFunction({
-        func: {
-          args: [
-            // Contract function args will go here
-          ],
-          auth: [],
-        },
-        hostFunction: {
-          type: 'invokeContract',
-          contractId: getSpeciesVotingContract(network),
-          functionName: 'propose_species',
-        },
+        func: {} as any, // Compiler stub
+        auth: [],
       })
     )
     .setTimeout(300)
@@ -122,13 +101,6 @@ export async function buildProposeSpeciesTransaction(
 
 /**
  * Build a transaction to vote on a proposal.
- *
- * @param voterPublicKey - Wallet address voting
- * @param proposalId - Proposal ID to vote on
- * @param voteFor - true to vote for, false to vote against
- * @param network - "testnet" | "mainnet"
- *
- * @returns Unsigned transaction XDR ready for signing
  */
 export async function buildVoteTransaction(
   voterPublicKey: string,
@@ -140,22 +112,15 @@ export async function buildVoteTransaction(
   const voterAccount = await server.loadAccount(voterPublicKey);
   const networkPassphrase = networkConfig.networkPassphrase;
 
-  // TODO: Replace with actual Soroban contract invocation
+  // TODO: Replace with actual Soroban contract invocation using xdr.HostFunction
   const transaction = new TransactionBuilder(voterAccount, {
     fee: BASE_FEE,
     networkPassphrase,
   })
     .addOperation(
       Operation.invokeHostFunction({
-        func: {
-          args: [],
-          auth: [],
-        },
-        hostFunction: {
-          type: 'invokeContract',
-          contractId: getSpeciesVotingContract(network),
-          functionName: 'vote',
-        },
+        func: {} as any, // Compiler stub
+        auth: [],
       })
     )
     .setTimeout(300)
@@ -169,12 +134,6 @@ export async function buildVoteTransaction(
 
 /**
  * Build a transaction to execute a passed proposal.
- *
- * @param executorPublicKey - Wallet address executing the proposal
- * @param proposalId - Proposal ID to execute
- * @param network - "testnet" | "mainnet"
- *
- * @returns Unsigned transaction XDR ready for signing
  */
 export async function buildExecuteProposalTransaction(
   executorPublicKey: string,
@@ -185,22 +144,15 @@ export async function buildExecuteProposalTransaction(
   const executorAccount = await server.loadAccount(executorPublicKey);
   const networkPassphrase = networkConfig.networkPassphrase;
 
-  // TODO: Replace with actual Soroban contract invocation
+  // TODO: Replace with actual Soroban contract invocation using xdr.HostFunction
   const transaction = new TransactionBuilder(executorAccount, {
     fee: BASE_FEE,
     networkPassphrase,
   })
     .addOperation(
       Operation.invokeHostFunction({
-        func: {
-          args: [],
-          auth: [],
-        },
-        hostFunction: {
-          type: 'invokeContract',
-          contractId: getSpeciesVotingContract(network),
-          functionName: 'execute_proposal',
-        },
+        func: {} as any, // Compiler stub
+        auth: [],
       })
     )
     .setTimeout(300)
@@ -236,12 +188,12 @@ export function isVotingActive(votingEndsAt: number): boolean {
 export function formatVotingTimeRemaining(votingEndsAt: number): string {
   const now = Date.now() / 1000;
   const remaining = votingEndsAt - now;
-  
+
   if (remaining <= 0) return 'Voting ended';
-  
- const days = Math.floor(remaining / 86400);
+
+  const days = Math.floor(remaining / 86400);
   const hours = Math.floor((remaining % 86400) / 3600);
-  
+
   if (days > 0) return `${days} day${days > 1 ? 's' : ''} remaining`;
   if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} remaining`;
   return 'Less than 1 hour remaining';
