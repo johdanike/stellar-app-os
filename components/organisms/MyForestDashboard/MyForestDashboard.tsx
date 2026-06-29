@@ -112,7 +112,7 @@ export function MyForestDashboard({ initialFilters }: MyForestDashboardProps) {
     ][];
   }, [trees]);
 
-  const speciesColors: Record<TreeSpecies, string> = {
+  const speciesColors: Partial<Record<TreeSpecies, string>> = {
     Teak: '#f59e0b',
     Moringa: '#10b981',
     Eucalyptus: '#14b8a6',

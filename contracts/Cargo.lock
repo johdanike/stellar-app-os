@@ -2099,6 +2099,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-registry"
+version = "0.1.0"
+dependencies = [
+ "contract-utils",
+ "harvesta-errors",
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
 name = "tree-token"
 version = "0.1.0"
 dependencies = [

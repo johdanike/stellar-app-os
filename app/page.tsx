@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
 import { Counter } from '@/components/atoms/Counter';
 import { OnboardingTour } from '@/components/organisms/OnboardingTour/OnboardingTour';
+import { LandingHero } from '@/components/organisms/LandingHero';
 import SocialShareButtons from '@/components/SocialShareButtons';
 import {
   Card,
@@ -17,7 +18,6 @@ import {
 import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal';
 import { useToast } from '@/hooks/useToast';
 import { useAppTranslation } from '@/hooks/useTranslation';
-import { LandingHero } from '@/components/organisms/LandingHero';
 
 export default function HomePage(): JSX.Element {
   const [showTx, setShowTx] = useState(false);

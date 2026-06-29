@@ -42,7 +42,7 @@ function getSpeciesIcon(species: TreeSpecies) {
   }
 }
 
-const bgColors: Record<TreeSpecies, string> = {
+const bgColors: Partial<Record<TreeSpecies, string>> = {
   Teak: 'bg-amber-500/10 border-amber-500/20 dark:bg-amber-500/5 dark:border-amber-500/10',
   Moringa:
     'bg-emerald-500/10 border-emerald-500/20 dark:bg-emerald-500/5 dark:border-emerald-500/10',

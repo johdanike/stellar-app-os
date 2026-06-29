@@ -5,6 +5,10 @@
 //! Import the crate, then call `panic_with_error!(env, HarvestaError::Variant)`
 //! instead of raw string panics.  Error codes are stable u32 values embedded in
 //! the Stellar XDR so off-chain tooling can parse them without string matching.
+//!
+//! NOTE: Error count is capped at 48 variants to stay within the Soroban SDK
+//! `#[contracterror]` XDR spec limit.  Carbon marketplace codes (100–113)
+//! are excluded — move them to a `carbon-marketplace-errors` crate if needed.
 
 use soroban_sdk::contracterror;
 
@@ -59,12 +63,12 @@ pub enum HarvestaError {
     FarmerNotRegistered = 36,
     InvalidRegion = 37,
 
-    // ── Species registry (62–66) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 69–70) ───────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
-    InvasiveSpecies = 65,
-    HighWaterUse = 66,
+    InvasiveSpecies = 69,
+    HighWaterUse = 70,
 
     // ── Farmer registry (validator / hash — 67–68) ───────────────────────────
     /// Caller is not a registered validator — gated read/write denied.

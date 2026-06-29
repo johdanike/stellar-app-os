@@ -21,7 +21,7 @@ interface ClusterItem {
   lng: number;
   count: number;
   trees: Tree[];
-  speciesCounts: Record<TreeSpecies, number>;
+  speciesCounts: Partial<Record<TreeSpecies, number>>;
   region: string;
 }
 
