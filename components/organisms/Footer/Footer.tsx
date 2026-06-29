@@ -125,8 +125,7 @@ export function Footer(): React.ReactNode {
                     aria-label={social.ariaLabel}
                     className="flex items-center justify-center w-10 h-10 rounded-lg border border-cyan-500/20 text-stellar-blue hover:bg-cyan-500/10 hover:border-stellar-blue transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-stellar-blue"
                   >
-                    <Icon className="w-5 h-5" />
-                    <span className="sr-only">{social.label}</span>
+                    <Icon className="w-5 h-5" aria-hidden="true" />
                   </Link>
                 </li>
               );

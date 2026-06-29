@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   consumeOnboardingTourRestartRequest,
   hasCompletedOnboardingTour,
   markOnboardingTourCompleted,
   onboardingTourSteps,
-} from "@/lib/onboardingTour";
-import { Button } from "@/components/atoms/Button";
-import { Text } from "@/components/atoms/Text";
+} from '@/lib/onboardingTour';
+import { Button } from '@/components/atoms/Button';
+import { Text } from '@/components/atoms/Text';
 
 interface FloatingPosition {
   top: number;
@@ -70,11 +70,11 @@ export function OnboardingTour(): React.ReactNode {
       return;
     }
 
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     element.scrollIntoView({
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-      block: "center",
-      inline: "center",
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'center',
+      inline: 'center',
     });
   }, [currentStep.target, isOpen]);
 
@@ -89,12 +89,12 @@ export function OnboardingTour(): React.ReactNode {
       updateTargetRect();
     };
 
-    window.addEventListener("resize", onViewportChange);
-    window.addEventListener("scroll", onViewportChange, true);
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('scroll', onViewportChange, true);
 
     return () => {
-      window.removeEventListener("resize", onViewportChange);
-      window.removeEventListener("scroll", onViewportChange, true);
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('scroll', onViewportChange, true);
     };
   }, [isOpen, updateTargetRect]);
 
@@ -126,10 +126,16 @@ export function OnboardingTour(): React.ReactNode {
     const fitsBelow = proposedBottom + dialogHeight <= viewportHeight - DIALOG_MARGIN;
     const top = fitsBelow
       ? proposedBottom
-      : Math.max(DIALOG_MARGIN, Math.min(proposedTop, viewportHeight - dialogHeight - DIALOG_MARGIN));
+      : Math.max(
+          DIALOG_MARGIN,
+          Math.min(proposedTop, viewportHeight - dialogHeight - DIALOG_MARGIN)
+        );
 
     const centeredLeft = targetRect.left + targetRect.width / 2 - dialogWidth / 2;
-    const left = Math.max(DIALOG_MARGIN, Math.min(centeredLeft, viewportWidth - dialogWidth - DIALOG_MARGIN));
+    const left = Math.max(
+      DIALOG_MARGIN,
+      Math.min(centeredLeft, viewportWidth - dialogWidth - DIALOG_MARGIN)
+    );
 
     setDialogPosition({ top, left });
   }, [currentStepIndex, isOpen, targetRect]);
@@ -156,33 +162,73 @@ export function OnboardingTour(): React.ReactNode {
     setCurrentStepIndex((previous) => Math.max(0, previous - 1));
   }, []);
 
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      previousActiveElementRef.current = document.activeElement as HTMLElement;
+    } else {
+      if (previousActiveElementRef.current) {
+        previousActiveElementRef.current.focus();
+        previousActiveElementRef.current = null;
+      }
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         event.preventDefault();
         handleClose();
         return;
       }
 
-      if (event.key === "ArrowRight") {
+      if (event.key === 'ArrowRight') {
         event.preventDefault();
         handleNext();
         return;
       }
 
-      if (event.key === "ArrowLeft") {
+      if (event.key === 'ArrowLeft') {
         event.preventDefault();
         handleBack();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+
+        const focusableElements = dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (event.shiftKey) {
+          if (document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     };
 
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener('keydown', onKeyDown);
     };
   }, [handleBack, handleClose, handleNext, isOpen]);
 
@@ -209,7 +255,7 @@ export function OnboardingTour(): React.ReactNode {
       left,
       width,
       height,
-      boxShadow: "0 0 0 9999px rgba(2, 6, 23, 0.72)",
+      boxShadow: '0 0 0 9999px rgba(2, 6, 23, 0.72)',
     };
   }, [targetRect]);
 
@@ -251,7 +297,12 @@ export function OnboardingTour(): React.ReactNode {
           <Text variant="small" className="text-slate-300">
             Step {currentStepIndex + 1} of {totalSteps}
           </Text>
-          <Button variant="ghost" size="sm" onClick={handleClose} className="text-slate-200 hover:text-white">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClose}
+            className="text-slate-200 hover:text-white"
+          >
             Skip tour
           </Button>
         </div>
@@ -260,7 +311,12 @@ export function OnboardingTour(): React.ReactNode {
           {currentStep.title}
         </Text>
 
-        <Text id="onboarding-tour-description" variant="body" as="p" className="mb-4 text-slate-200">
+        <Text
+          id="onboarding-tour-description"
+          variant="body"
+          as="p"
+          className="mb-4 text-slate-200"
+        >
           {currentStep.description}
         </Text>
 
@@ -276,7 +332,7 @@ export function OnboardingTour(): React.ReactNode {
           </Button>
 
           <Button size="sm" stellar="primary" onClick={handleNext}>
-            {currentStepIndex === totalSteps - 1 ? "Finish tour" : "Next"}
+            {currentStepIndex === totalSteps - 1 ? 'Finish tour' : 'Next'}
           </Button>
         </div>
       </div>

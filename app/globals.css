@@ -90,7 +90,7 @@
 
   /* Primary — Stellar Blue */
   --primary: #14b6e7;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #0d0b21;
 
   /* Secondary — Light blue tint */
   --secondary: #e8f7fc;
@@ -98,7 +98,7 @@
 
   /* Muted */
   --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  --muted-foreground: #475569;
 
   /* Accent — Stellar Purple */
   --accent: #3e1bdb;

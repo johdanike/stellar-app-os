@@ -14,7 +14,10 @@ import { OnboardingTour } from '@/components/organisms/OnboardingTour/Onboarding
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
+    <main
+      id="main-content"
+      className="flex min-h-screen flex-col items-center justify-center gap-8 p-8"
+    >
       <div data-tour-id="hero-section" className="flex flex-col items-center gap-4 text-center">
         <Badge variant="default">Powered by Stellar</Badge>
         <Text variant="h1">FarmCredit</Text>
@@ -24,7 +27,10 @@ export default function Home() {
       </div>
 
       {/* Platform Stats */}
-      <div data-tour-id="stats-grid" className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-4xl">
+      <div
+        data-tour-id="stats-grid"
+        className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-4xl"
+      >
         <div className="flex flex-col items-center gap-2 p-6 rounded-lg bg-muted/50">
           <Counter end={1234567} prefix="$" className="text-center" />
           <Text variant="muted" className="text-sm">
@@ -51,13 +57,24 @@ export default function Home() {
           <CardDescription>Connect your wallet to access farm credit services.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button data-tour-id="connect-wallet-button" variant="default" size="lg" className="w-full">
+          <Button
+            data-tour-id="connect-wallet-button"
+            variant="default"
+            size="lg"
+            className="w-full"
+          >
             Connect Wallet
           </Button>
           <Button asChild variant="outline" size="lg" className="w-full">
             <Link href="/blog">Read our Blog</Link>
           </Button>
-          <Button data-tour-id="purchase-credits-button" asChild variant="outline" size="lg" className="w-full">
+          <Button
+            data-tour-id="purchase-credits-button"
+            asChild
+            variant="outline"
+            size="lg"
+            className="w-full"
+          >
             <Link href="/credits/purchase">Purchase Carbon Credits</Link>
           </Button>
           <Button asChild variant="outline" size="lg" className="w-full">
@@ -66,6 +83,6 @@ export default function Home() {
         </CardContent>
       </Card>
       <OnboardingTour />
-    </div>
+    </main>
   );
 }
