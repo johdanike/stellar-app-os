@@ -111,7 +111,7 @@ export function connectXBull(_network: NetworkType): Promise<string> {
 
   return new Promise((resolve, reject) => {
     const _networkPassphrase =
-      network === 'mainnet'
+      _network === 'mainnet'
         ? 'Public Global Stellar Network ; September 2015'
         : 'Test SDF Network ; September 2015';
 

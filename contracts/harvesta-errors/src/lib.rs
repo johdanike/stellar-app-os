@@ -38,46 +38,42 @@ pub enum HarvestaError {
     BurnAmountMustBePositive = 14,
     SlotAmountMustBePositive = 15,
 
-    // ── Farmer registry (35–37, 65–66) ────────────────────────────────────────
+    // ── Farmer registry (35–37, 67-68) ───────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
     FarmerNotRegistered = 36,
     InvalidRegion = 37,
-    NotValidator = 65,
-    HashMismatch = 66,
+    /// Caller is not a registered validator — gated read/write denied.
+    NotValidator = 67,
+    /// The SHA-256 hash supplied by the caller does not match the one stored
+    /// on-chain for this farmer's identity document.
+    HashMismatch = 68,
 
-    // ── Species registry (62–66) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 69-70) ──────────────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
-    InvasiveSpecies = 65,
-    HighWaterUse = 66,
+    InvasiveSpecies = 69,
+    HighWaterUse = 70,
 
-    // ── Location / ZK proofs (65–69, 125–128) ─────────────────────────────────
-    OutsideNigeriaRegion = 65,
-    ProofCommitmentAlreadyReg = 66,
-    CommitmentAlreadySubmitted = 67,
-    CommitmentNotFound = 68,
-    CommitmentNotPending = 69,
-    PeriodEndBeforeStart = 125,
-    ProofDigestAlreadyReg = 126,
-    ProofNotFound = 127,
-    ProofAlreadyRevoked = 128,
+    // ── Carbon marketplace (100–113) ───────────────────────────────────────────
+    ListingAmountMustBePositive = 100,
+    PriceMustBePositive = 101,
+    ListingNotFound = 102,
+    ListingNotActive = 103,
+    InsufficientLiquidity = 104,
+    BuyAmountMustBePositive = 105,
+    SelfTrade = 106,
+    InvalidPriceRange = 107,
+    InvalidDecayRate = 108,
+    InvalidDuration = 109,
+    AuctionNotFound = 110,
+    AuctionNotActive = 111,
+    AuctionExpired = 112,
+    BidBelowReservePrice = 113,
 
-    // ── Donation escrow (71–79, 129–130) ──────────────────────────────────────
-    AlreadyProcessed = 71,
-    NotDonor = 72,
-    DonationAlreadyCancelled = 73,
-    DonationCancelled = 74,
-    IntervalNotElapsed = 75,
-    ProjectNotRegistered = 76,
-    AmountPerIntervalMustBePos = 77,
-    IntervalSecondsMustBePos = 78,
-    RecurringDonationNotFound = 79,
-    EscrowNotFound = 129,
-    UnsupportedToken = 130,
-
-    // ── Arithmetic overflows (81) ──────────────────────────────────────────────
-    TokenUnitOverflow = 81,
+    // ── Arithmetic overflows (86–87) ──────────────────────────────────────────
+    TreeTokenMintOverflow = 86,
+    TokenUnitOverflow = 87,
 }
 
 /// Multi-signature governance errors — used by admin-controls only.

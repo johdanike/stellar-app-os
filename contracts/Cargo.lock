@@ -285,7 +285,7 @@ dependencies = [
 name = "carbon-credits"
 version = "0.1.0"
 dependencies = [
- "soroban-sdk",
+ "soroban-sdk 21.7.7",
 ]
 
 [[package]]
@@ -1909,6 +1909,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sponsor-receipt"
+version = "0.1.0"
+dependencies = [
+ "contract-utils",
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2087,6 +2095,15 @@ dependencies = [
  "contract-utils",
  "harvesta-errors",
  "proptest",
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
+name = "tree-registry"
+version = "0.1.0"
+dependencies = [
+ "contract-utils",
+ "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]
 
