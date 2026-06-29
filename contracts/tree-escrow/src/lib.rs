@@ -113,6 +113,7 @@ pub struct BatchSlot {
     pub farmer: Address,
     pub amount: i128,
     pub gift_recipient: Option<Address>,
+    pub referrer: Option<Address>,
 }
 
 /// Oracle-submitted survival report for a single tree.
@@ -238,6 +239,8 @@ enum DataKey {
     OracleReport(u64),
     /// Per-tree co-funded escrow record
     TreeFunding(u64),
+    /// Track used proof hashes for replay attack prevention (#481)
+    UsedProof(BytesN<32>),
     /// Sponsor dispute on a verification outcome (#469)
     Dispute(u64),
     /// DAO members authorised to arbitrate disputes
@@ -373,6 +376,10 @@ impl TreeEscrow {
     ) {
         donor.require_auth();
 
+        if Self::is_paused(&env) {
+            panic!("contract is paused - deposits are not allowed");
+        }
+
         if amount <= 0 {
             panic_with_error!(&env, HarvestaError::AmountMustBePositive);
         }
@@ -434,6 +441,10 @@ impl TreeEscrow {
     pub fn batch_deposit(env: Env, donor: Address, token: Address, slots: Vec<BatchSlot>) {
         donor.require_auth();
 
+        if Self::is_paused(&env) {
+            panic!("contract is paused - deposits are not allowed");
+        }
+
         let n = slots.len();
         if n == 0 {
             panic_with_error!(&env, HarvestaError::BatchEmpty);
@@ -452,7 +463,7 @@ impl TreeEscrow {
             if env.storage().persistent().has(&key) {
                 panic_with_error!(&env, HarvestaError::EscrowAlreadyExists);
             }
-            total += slot.amount;
+            total = total.checked_add(slot.amount).expect("batch total overflow");
         }
 
         contract_utils::assert_whitelisted(&env, &token);
@@ -534,6 +545,23 @@ impl TreeEscrow {
             panic!("all progress updates completed");
         }
 
+        // Replay attack prevention (#481): reject duplicate proof hashes
+        let proof_key = DataKey::UsedProof(proof_hash.clone());
+        if env.storage().persistent().has(&proof_key) {
+            panic!("proof hash already used: replay attack prevented");
+        }
+
+        let tranche1 = (rec.total_amount * TRANCHE_1_BPS) / BPS_DENOM;
+        let tranche1 = rec
+            .total_amount
+            .checked_mul(TRANCHE_1_BPS)
+            .expect("tranche1 calculation overflow")
+            .checked_div(BPS_DENOM)
+            .expect("tranche1 division error");
+        let tree_unit = Self::compute_token_unit(tree_decimals);
+        let tree_tokens = verified_tree_count
+            .checked_mul(tree_unit)
+            .expect("tree token mint amount overflow");
         // First progress update transitions Funded → Planted and mints TREE rewards.
         if rec.status == EscrowStatus::Funded {
             if verified_tree_count <= 0 {
@@ -572,6 +600,17 @@ impl TreeEscrow {
             &stream_amount,
         );
 
+        rec.released = rec
+            .released
+            .checked_add(tranche1)
+            .expect("released amount overflow");
+        rec.verified_tree_count = verified_tree_count;
+        rec.tree_tokens_minted = tree_tokens;
+        rec.status = EscrowStatus::Planted;
+        rec.planted_at = env.ledger().timestamp();
+        rec.planting_proof = proof_hash.clone();
+        env.storage().persistent().set(&proof_key, &true);
+        rec.planting_proof = proof_hash;
         rec.released += stream_amount;
         rec.progress_updates += 1;
 
@@ -676,6 +715,13 @@ impl TreeEscrow {
             panic_with_error!(&env, HarvestaError::SurvivalRateBelowMinimum);
         }
 
+        // Replay attack prevention (#481): reject duplicate proof hashes
+        let proof_key = DataKey::UsedProof(proof_hash.clone());
+        if env.storage().persistent().has(&proof_key) {
+            panic!("proof hash already used: replay attack prevented");
+        }
+
+        let tranche2 = rec.total_amount - rec.released;
         let tranche2 = (rec.total_amount * TRANCHE_2_BPS) / BPS_DENOM;
         if tranche2 <= 0 {
             panic_with_error!(&env, HarvestaError::NothingToRelease);
@@ -687,10 +733,16 @@ impl TreeEscrow {
             &tranche2,
         );
 
+        // Record the Tranche2 payout for the farmer
+        Self::record_payout(&env, rec.farmer.clone(), tranche2, PayoutType::Tranche2);
+
         rec.released += tranche2;
+        rec.status = EscrowStatus::Completed;
+        rec.survival_proof = proof_hash.clone();
         rec.status = EscrowStatus::Survived;
         rec.survival_proof = proof_hash;
         rec.survival_rate_percent = survival_rate_percent;
+        env.storage().persistent().set(&proof_key, &true);
 
         env.storage().persistent().set(&key, &rec);
 
@@ -931,6 +983,10 @@ impl TreeEscrow {
     pub fn contribute(env: Env, funder: Address, tree_id: u64, amount: i128) {
         funder.require_auth();
 
+        if Self::is_paused(&env) {
+            panic!("contract is paused - contributions are not allowed");
+        }
+
         if amount <= 0 {
             panic_with_error!(&env, HarvestaError::AmountMustBePositive);
         }
@@ -958,7 +1014,7 @@ impl TreeEscrow {
         for i in 0..n {
             let mut c = funding.contributions.get(i).unwrap();
             if c.funder == funder {
-                c.amount += amount;
+                c.amount = c.amount.checked_add(amount).expect("contribution amount overflow");
                 funding.contributions.set(i, c);
                 found = true;
                 break;
@@ -971,7 +1027,7 @@ impl TreeEscrow {
             });
         }
 
-        funding.total_funded += amount;
+        funding.total_funded = funding.total_funded.checked_add(amount).expect("total funded overflow");
         env.storage().persistent().set(&key, &funding);
 
         env.events()
@@ -1011,7 +1067,7 @@ impl TreeEscrow {
         if funding.total_funded <= 0 {
             panic_with_error!(&env, HarvestaError::NoFundsToRelease);
         }
-        let remaining = funding.total_funded - funding.released;
+        let remaining = funding.total_funded.checked_sub(funding.released).expect("remaining calculation underflow");
         if payout_amount <= 0 || payout_amount > remaining {
             panic_with_error!(&env, HarvestaError::InvalidPayoutAmount);
         }
@@ -1036,17 +1092,17 @@ impl TreeEscrow {
                 continue;
             }
             let c = funding.contributions.get(i).unwrap();
-            let payout = (c.amount * payout_amount) / funding.total_funded;
+            let payout = (c.amount.checked_mul(payout_amount).expect("payout calculation overflow")).checked_div(funding.total_funded).expect("payout division error");
             if payout > 0 {
                 token_client.transfer(&env.current_contract_address(), &c.funder, &payout);
             }
-            paid_so_far += payout;
+            paid_so_far = paid_so_far.checked_add(payout).expect("paid_so_far overflow");
             env.events()
                 .publish((symbol_short!("propayout"), tree_id), (c.funder, payout));
         }
 
         let largest = funding.contributions.get(largest_idx).unwrap();
-        let largest_payout = payout_amount - paid_so_far;
+        let largest_payout = payout_amount.checked_sub(paid_so_far).expect("largest payout calculation underflow");
         if largest_payout > 0 {
             token_client.transfer(
                 &env.current_contract_address(),
@@ -1059,7 +1115,7 @@ impl TreeEscrow {
             (largest.funder, largest_payout),
         );
 
-        funding.released += payout_amount;
+        funding.released = funding.released.checked_add(payout_amount).expect("released amount overflow");
         if funding.released >= funding.total_funded {
             funding.status = TreeFundingStatus::Released;
         }
@@ -1302,7 +1358,14 @@ impl TreeEscrow {
         false
     }
 
-    fn compute_token_unit(env: &Env, decimals: u32) -> i128 {
+    fn is_paused(env: &Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+    }
+
+    fn compute_token_unit(decimals: u32) -> i128 {
         let mut unit = 1i128;
         let mut i = 0u32;
         while i < decimals {
@@ -1326,6 +1389,23 @@ impl TreeEscrow {
             .instance()
             .get(&DataKey::JobSizeThreshold)
             .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized))
+    fn record_payout(env: &Env, planter: Address, amount: i128, payout_type: PayoutType) {
+        let key = DataKey::PayoutHistory(planter.clone());
+        let mut payouts: Vec<Payout> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or(Vec::new(env));
+
+        let payout = Payout {
+            planter,
+            amount,
+            payout_type,
+            timestamp: env.ledger().timestamp(),
+        };
+
+        payouts.push_back(payout);
+        env.storage().persistent().set(&key, &payouts);
     }
 }
 
@@ -1476,5 +1556,458 @@ mod tests {
 
         let record = ctx.client.get_record(&ctx.planter).unwrap();
         assert_eq!(record.status, EscrowStatus::Planted);
+    #[test]
+    fn test_custom_density_threshold() {
+        // Test with custom density threshold of 500 trees/hectare
+        let ctx = setup_with_density(70, 500, 5);
+        // Job size (5 hectares) meets custom threshold
+        // Density = 2000 trees / 5 hectares = 400 trees/hectare (below 500 minimum)
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &2_000, &5);
+        assert_eq!(
+            ctx.client.get_record(&ctx.farmer).unwrap().status,
+            EscrowStatus::Funded
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "area hectares must be positive")]
+    fn test_deposit_rejects_zero_area() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &0);
+    }
+
+    #[test]
+    fn test_batch_deposit_creates_record_per_slot() {
+        let ctx = setup();
+        let f1 = Address::generate(&ctx.env);
+        let f2 = Address::generate(&ctx.env);
+        let slots = vec![
+            &ctx.env,
+            BatchSlot {
+                farmer: f1.clone(),
+                amount: 1_500,
+                gift_recipient: None,
+            },
+            BatchSlot {
+                farmer: f2.clone(),
+                amount: 2_500,
+                gift_recipient: None,
+            },
+        ];
+        ctx.client.batch_deposit(&ctx.donor, &ctx.token, &slots);
+
+        let r1 = ctx.client.get_record(&f1).unwrap();
+        assert_eq!(r1.total_amount, 1_500);
+        assert_eq!(r1.status, EscrowStatus::Funded);
+        let r2 = ctx.client.get_record(&f2).unwrap();
+        assert_eq!(r2.total_amount, 2_500);
+    }
+
+    // ── Oracle survival reports (#394) ────────────────────────────────────────
+
+    #[test]
+    fn test_submit_survival_report_records_report() {
+        let ctx = setup();
+        ctx.client.submit_survival_report(&ctx.oracle, &7, &82);
+
+        let r = ctx.client.get_oracle_report(&7).unwrap();
+        assert_eq!(r.tree_id, 7);
+        assert_eq!(r.survival_rate_percent, 82);
+        assert_eq!(r.oracle, ctx.oracle);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #26)")]
+    fn test_submit_survival_report_rejects_unauthorized_caller() {
+        let ctx = setup();
+        let impostor = Address::generate(&ctx.env);
+        ctx.client.submit_survival_report(&impostor, &7, &82);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #22)")]
+    fn test_submit_survival_report_rejects_above_100() {
+        let ctx = setup();
+        ctx.client.submit_survival_report(&ctx.oracle, &7, &101);
+    }
+
+    #[test]
+    fn test_oracle_report_overwrites_on_resubmission() {
+        let ctx = setup();
+        ctx.client.submit_survival_report(&ctx.oracle, &9, &50);
+        ctx.client.submit_survival_report(&ctx.oracle, &9, &90);
+        assert_eq!(
+            ctx.client.get_oracle_report(&9).unwrap().survival_rate_percent,
+            90
+        );
+    }
+
+    #[test]
+    fn test_survival_threshold_is_queryable() {
+        let ctx = setup_with_threshold(85);
+        assert_eq!(ctx.client.get_survival_threshold(), 85);
+    }
+
+    // ── Co-funded flow (#402) ─────────────────────────────────────────────────
+
+    fn register_and_contribute(ctx: &Ctx, tree_id: u64, contribs: &[(Address, i128)]) {
+        ctx.client.register_tree(&tree_id, &ctx.farmer, &ctx.token);
+        for (funder, amount) in contribs {
+            fund(&ctx.env, &ctx.token, funder, *amount);
+            ctx.client.contribute(funder, &tree_id, amount);
+        }
+    }
+
+    #[test]
+    fn test_cofund_two_funders_full_pool_payout() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        let b = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 1, &[(a.clone(), 4_000), (b.clone(), 6_000)]);
+
+        let funding = ctx.client.get_tree_funding(&1).unwrap();
+        assert_eq!(funding.total_funded, 10_000);
+        assert_eq!(funding.contributions.len(), 2);
+
+        ctx.client.submit_survival_report(&ctx.oracle, &1, &80);
+        let pre_a = balance(&ctx.env, &ctx.token, &a);
+        let pre_b = balance(&ctx.env, &ctx.token, &b);
+
+        ctx.client.release_proportional(&1, &10_000);
+
+        assert_eq!(balance(&ctx.env, &ctx.token, &a) - pre_a, 4_000);
+        assert_eq!(balance(&ctx.env, &ctx.token, &b) - pre_b, 6_000);
+        assert_eq!(
+            ctx.client.get_tree_funding(&1).unwrap().status,
+            TreeFundingStatus::Released
+        );
+    }
+
+    #[test]
+    fn test_cofund_three_funders_remainder_goes_to_largest() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        let b = Address::generate(&ctx.env);
+        let c = Address::generate(&ctx.env);
+        register_and_contribute(
+            &ctx,
+            2,
+            &[(a.clone(), 100), (b.clone(), 100), (c.clone(), 101)],
+        );
+
+        let pre_a = balance(&ctx.env, &ctx.token, &a);
+        let pre_b = balance(&ctx.env, &ctx.token, &b);
+        let pre_c = balance(&ctx.env, &ctx.token, &c);
+
+        ctx.client.submit_survival_report(&ctx.oracle, &2, &80);
+        ctx.client.release_proportional(&2, &100);
+
+        assert_eq!(balance(&ctx.env, &ctx.token, &a) - pre_a, 33);
+        assert_eq!(balance(&ctx.env, &ctx.token, &b) - pre_b, 33);
+        assert_eq!(balance(&ctx.env, &ctx.token, &c) - pre_c, 34);
+
+        let f = ctx.client.get_tree_funding(&2).unwrap();
+        assert_eq!(f.status, TreeFundingStatus::Open);
+        assert_eq!(f.released, 100);
+    }
+
+    #[test]
+    fn test_cofund_single_funder_receives_full_pool() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 3, &[(a.clone(), 7_777)]);
+
+        let pre_a = balance(&ctx.env, &ctx.token, &a);
+        ctx.client.submit_survival_report(&ctx.oracle, &3, &80);
+        ctx.client.release_proportional(&3, &7_777);
+
+        assert_eq!(balance(&ctx.env, &ctx.token, &a) - pre_a, 7_777);
+    }
+
+    #[test]
+    fn test_cofund_partial_release_then_full_release() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        let b = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 8, &[(a.clone(), 4_000), (b.clone(), 6_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &8, &80);
+
+        ctx.client.release_proportional(&8, &7_500);
+        let f = ctx.client.get_tree_funding(&8).unwrap();
+        assert_eq!(f.released, 7_500);
+        assert_eq!(f.status, TreeFundingStatus::Open);
+
+        ctx.client.release_proportional(&8, &2_500);
+        assert_eq!(
+            ctx.client.get_tree_funding(&8).unwrap().status,
+            TreeFundingStatus::Released
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #13)")]
+    fn test_cofund_release_exceeding_remaining_rejected() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 9, &[(a, 1_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &9, &80);
+        ctx.client.release_proportional(&9, &1_001);
+    }
+
+    #[test]
+    fn test_cofund_same_funder_contributes_twice_share_merges() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        ctx.client.register_tree(&4, &ctx.farmer, &ctx.token);
+        fund(&ctx.env, &ctx.token, &a, 1_000);
+        ctx.client.contribute(&a, &4, &1_000);
+        fund(&ctx.env, &ctx.token, &a, 500);
+        ctx.client.contribute(&a, &4, &500);
+
+        let funding = ctx.client.get_tree_funding(&4).unwrap();
+        assert_eq!(funding.contributions.len(), 1);
+        assert_eq!(funding.contributions.get(0).unwrap().amount, 1_500);
+        assert_eq!(funding.total_funded, 1_500);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #31)")]
+    fn test_cofund_contribute_before_register_rejected() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        fund(&ctx.env, &ctx.token, &a, 100);
+        ctx.client.contribute(&a, &99, &100);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #27)")]
+    fn test_cofund_release_without_oracle_report_rejected() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 5, &[(a, 1_000)]);
+        ctx.client.release_proportional(&5, &1_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #23)")]
+    fn test_cofund_release_below_threshold_rejected() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 6, &[(a, 1_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &6, &50);
+        ctx.client.release_proportional(&6, &1_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #33)")]
+    fn test_cofund_release_after_full_payout_rejected() {
+        let ctx = setup();
+        let a = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 7, &[(a, 1_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &7, &80);
+        ctx.client.release_proportional(&7, &1_000);
+        ctx.client.release_proportional(&7, &1);
+    }
+
+    // ── Replay attack prevention (#481) ────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_planting_proof_replay_across_escrows_rejected() {
+        let ctx = setup();
+        let farmer_a = Address::generate(&ctx.env);
+        let farmer_b = Address::generate(&ctx.env);
+        let donor2 = Address::generate(&ctx.env);
+        fund(&ctx.env, &ctx.token, &donor2, 10_000);
+
+        ctx.client
+            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&farmer_a, &proof(&ctx.env, 1), &1);
+
+        ctx.client
+            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&farmer_b, &proof(&ctx.env, 1), &1);
+    }
+
+    #[test]
+    fn test_planting_proof_different_hashes_across_escrows_allowed() {
+        let ctx = setup();
+        let farmer_a = Address::generate(&ctx.env);
+        let farmer_b = Address::generate(&ctx.env);
+        let donor2 = Address::generate(&ctx.env);
+        fund(&ctx.env, &ctx.token, &donor2, 10_000);
+
+        ctx.client
+            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&farmer_a, &proof(&ctx.env, 1), &1);
+
+        ctx.client
+            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&farmer_b, &proof(&ctx.env, 2), &1);
+
+        assert_eq!(
+            ctx.client.get_record(&farmer_b).unwrap().status,
+            EscrowStatus::Planted
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_survival_proof_replay_across_escrows_rejected() {
+        let ctx = setup();
+        let farmer_a = Address::generate(&ctx.env);
+        let farmer_b = Address::generate(&ctx.env);
+        let donor2 = Address::generate(&ctx.env);
+        fund(&ctx.env, &ctx.token, &donor2, 10_000);
+
+        ctx.client
+            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&farmer_a, &proof(&ctx.env, 1), &1);
+
+        ctx.client
+            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&farmer_b, &proof(&ctx.env, 2), &1);
+
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        ctx.client
+            .verify_survival(&farmer_a, &proof(&ctx.env, 3), &70);
+        ctx.client
+            .verify_survival(&farmer_b, &proof(&ctx.env, 3), &70);
+    }
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_planting_proof_replay_as_survival_rejected() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &1);
+        ctx.client
+            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &1);
+
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        ctx.client
+            .verify_survival(&ctx.farmer, &proof(&ctx.env, 1), &70);
+    // ── Dispute resolution (#469) ─────────────────────────────────────────────
+
+    #[test]
+    fn test_open_dispute_pauses_fund_release() {
+        let ctx = setup();
+        let sponsor = Address::generate(&ctx.env);
+        let dao = Address::generate(&ctx.env);
+        ctx.client.set_dao_members(&vec![&ctx.env, dao.clone()]);
+
+        register_and_contribute(&ctx, 20, &[(sponsor.clone(), 5_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &20, &85);
+
+        ctx.client.open_dispute(&sponsor, &20, &proof(&ctx.env, 9));
+        assert!(ctx.client.has_open_dispute(&20));
+
+        ctx.client.cast_dao_vote(&dao, &20, &false);
+        ctx.client.resolve_dispute(&dao, &20);
+
+        let dispute = ctx.client.get_dispute(&20).unwrap();
+        assert!(dispute.resolved);
+        assert_eq!(dispute.outcome, DisputeOutcome::VerificationOverturned);
+    }
+
+    #[test]
+    #[should_panic(expected = "fund release paused: dispute is open")]
+    fn test_release_blocked_while_dispute_open() {
+        let ctx = setup();
+        let sponsor = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 21, &[(sponsor.clone(), 3_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &21, &80);
+        ctx.client.open_dispute(&sponsor, &21, &proof(&ctx.env, 10));
+        ctx.client.release_proportional(&21, &3_000);
+    }
+
+    #[test]
+    #[should_panic(expected = "dispute window expired")]
+    fn test_open_dispute_rejected_after_seven_days() {
+        let ctx = setup();
+        let sponsor = Address::generate(&ctx.env);
+        register_and_contribute(&ctx, 22, &[(sponsor.clone(), 1_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &22, &80);
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += DISPUTE_WINDOW_SECS + 1);
+        ctx.client.open_dispute(&sponsor, &22, &proof(&ctx.env, 11));
+    }
+
+    #[test]
+    fn test_dao_upholds_verification_and_release_proceeds() {
+        let ctx = setup();
+        let sponsor = Address::generate(&ctx.env);
+        let dao = Address::generate(&ctx.env);
+        ctx.client.set_dao_members(&vec![&ctx.env, dao.clone()]);
+
+        register_and_contribute(&ctx, 23, &[(sponsor.clone(), 4_000)]);
+        ctx.client.submit_survival_report(&ctx.oracle, &23, &90);
+        ctx.client.open_dispute(&sponsor, &23, &proof(&ctx.env, 12));
+
+        ctx.client.cast_dao_vote(&dao, &23, &true);
+        ctx.client.resolve_dispute(&dao, &23);
+
+        assert!(!ctx.client.has_open_dispute(&23));
+        assert_eq!(
+            ctx.client.get_dispute(&23).unwrap().outcome,
+            DisputeOutcome::VerificationUpheld
+        );
+
+        let pre = balance(&ctx.env, &ctx.token, &sponsor);
+        ctx.client.release_proportional(&23, &4_000);
+        assert_eq!(balance(&ctx.env, &ctx.token, &sponsor) - pre, 4_000);
+    }
+
+    use proptest::prelude::*;
+    use std::collections::HashSet;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+        #[test]
+        fn test_tree_id_uniqueness_invariant(tree_ids in prop::collection::vec(0u64..1000u64, 1..30)) {
+            let ctx = setup();
+            let mut registered = HashSet::new();
+
+            for tree_id in tree_ids {
+                if registered.contains(&tree_id) {
+                    // Try to register the tree again. It must fail.
+                    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        ctx.client.register_tree(&tree_id, &ctx.farmer, &ctx.token);
+                    }));
+                    assert!(res.is_err(), "Expected panic when registering duplicate tree ID {}", tree_id);
+                } else {
+                    // Register the tree for the first time. It must succeed.
+                    ctx.client.register_tree(&tree_id, &ctx.farmer, &ctx.token);
+                    registered.insert(tree_id);
+
+                    // Verify that the tree can be retrieved and its info is correct
+                    let funding = ctx.client.get_tree_funding(&tree_id).unwrap();
+                    assert_eq!(funding.tree_id, tree_id);
+                    assert_eq!(funding.farmer, ctx.farmer);
+                    assert_eq!(funding.token, ctx.token);
+                }
+            }
+
+            // Post-condition: check that all registered tree IDs still exist and retrieve correctly
+            for tree_id in &registered {
+                let funding = ctx.client.get_tree_funding(tree_id).unwrap();
+                assert_eq!(funding.tree_id, *tree_id);
+            }
+        }
     }
 }

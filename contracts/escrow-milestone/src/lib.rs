@@ -217,7 +217,10 @@ impl EscrowMilestone {
             &payout,
         );
 
-        state.released += payout;
+        state.released = state
+            .released
+            .checked_add(payout)
+            .expect("released amount overflow");
         env.storage().persistent().set(&key, &state);
 
         env.events().publish(
@@ -253,7 +256,19 @@ impl EscrowMilestone {
             panic_with_error!(&env, HarvestaError::MilestoneAlreadyProcessed);
         }
 
+        // Replay attack prevention (#481): reject duplicate proof hashes
+        let used_key = Self::used_proof_key(&env, &verification_hash);
+        if env.storage().persistent().has(&used_key) {
+            panic!("proof hash already used: replay attack prevented");
+        }
+
         let release_amount = (state.total_amount * MILESTONE_1_BPS) / BPS_DENOM;
+        let release_amount = state
+            .total_amount
+            .checked_mul(MILESTONE_1_BPS)
+            .expect("release amount overflow")
+            .checked_div(BPS_DENOM)
+            .expect("release amount division error");
 
         token::Client::new(&env, &state.token).transfer(
             &env.current_contract_address(),
@@ -263,8 +278,9 @@ impl EscrowMilestone {
 
         state.released = release_amount;
         state.status = EscrowStatus::Milestone1Released;
-        state.verification_hash = OptProof::Some(verification_hash);
+        state.verification_hash = OptProof::Some(verification_hash.clone());
         state.milestone1_verified_at = env.ledger().timestamp();
+        env.storage().persistent().set(&used_key, &true);
 
         env.storage().persistent().set(&key, &state);
 
@@ -309,7 +325,17 @@ impl EscrowMilestone {
             panic_with_error!(&env, HarvestaError::SurvivalRateBelowMinimum);
         }
 
+        // Replay attack prevention (#481): reject duplicate proof hashes
+        let used_key = Self::used_proof_key(&env, &survival_verification_hash);
+        if env.storage().persistent().has(&used_key) {
+            panic!("proof hash already used: replay attack prevented");
+        }
+
         let remainder = state.total_amount - state.released;
+        let remainder = state
+            .total_amount
+            .checked_sub(state.released)
+            .expect("remainder calculation underflow");
         if remainder <= 0 {
             panic_with_error!(&env, HarvestaError::NothingToRelease);
         }
@@ -320,10 +346,14 @@ impl EscrowMilestone {
             &remainder,
         );
 
-        state.released += remainder;
+        state.released = state
+            .released
+            .checked_add(remainder)
+            .expect("released amount overflow");
         state.status = EscrowStatus::Completed;
-        state.survival_verification_hash = OptProof::Some(survival_verification_hash);
+        state.survival_verification_hash = OptProof::Some(survival_verification_hash.clone());
         state.survival_rate_percent = survival_rate_percent;
+        env.storage().persistent().set(&used_key, &true);
 
         env.storage().persistent().set(&key, &state);
 
@@ -388,7 +418,10 @@ impl EscrowMilestone {
             panic_with_error!(&env, HarvestaError::NoOpenDispute);
         }
 
-        let remainder = state.total_amount - state.released;
+        let remainder = state
+            .total_amount
+            .checked_sub(state.released)
+            .expect("remainder calculation underflow");
 
         if release_to_seller {
             // Release remaining funds to the farmer
@@ -398,7 +431,10 @@ impl EscrowMilestone {
                     &state.farmer,
                     &remainder,
                 );
-                state.released += remainder;
+                state.released = state
+                    .released
+                    .checked_add(remainder)
+                    .expect("released amount overflow");
             }
             state.status = EscrowStatus::Completed;
         } else {
@@ -461,6 +497,10 @@ impl EscrowMilestone {
 
     fn escrow_key(env: &Env, farmer: &Address) -> soroban_sdk::Val {
         (symbol_short!("ESCROW"), farmer.clone()).into_val(env)
+    }
+
+    fn used_proof_key(env: &Env, proof_hash: &BytesN<32>) -> soroban_sdk::Val {
+        (Symbol::new(env, "used_proof"), proof_hash.clone()).into_val(env)
     }
 
     fn require_admin(env: &Env) {
@@ -896,6 +936,109 @@ mod tests {
         client.release_partial(&admin, &farmer, &50);
         client.release_partial(&admin, &farmer, &50);
         client.release_partial(&admin, &farmer, &10);
+    }
+
+    // ── Replay attack prevention (#481) ────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_milestone_proof_replay_across_escrows_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            arbiter,
+            ..
+        } = setup();
+        let farmer_a = Address::generate(&env);
+        let farmer_b = Address::generate(&env);
+
+        // Fund two separate escrows with same proof hash
+        client.deposit(&funder, &farmer_a, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_a, &dummy_hash(&env, 1));
+
+        let donor2 = Address::generate(&env);
+        token::StellarAssetClient::new(&env, &token).mint(&donor2, &10_000);
+        client.deposit(&donor2, &farmer_b, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_b, &dummy_hash(&env, 1));
+    }
+
+    #[test]
+    fn test_milestone_proof_different_hashes_allowed() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            arbiter,
+            ..
+        } = setup();
+        let farmer_a = Address::generate(&env);
+        let farmer_b = Address::generate(&env);
+
+        client.deposit(&funder, &farmer_a, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_a, &dummy_hash(&env, 1));
+
+        let donor2 = Address::generate(&env);
+        token::StellarAssetClient::new(&env, &token).mint(&donor2, &10_000);
+        client.deposit(&donor2, &farmer_b, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_b, &dummy_hash(&env, 2));
+
+        assert_eq!(
+            client.get_escrow(&farmer_b).unwrap().status,
+            EscrowStatus::Milestone1Released
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_survival_proof_replay_across_escrows_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            arbiter,
+            ..
+        } = setup();
+        let farmer_a = Address::generate(&env);
+        let farmer_b = Address::generate(&env);
+
+        client.deposit(&funder, &farmer_a, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_a, &dummy_hash(&env, 1));
+
+        let donor2 = Address::generate(&env);
+        token::StellarAssetClient::new(&env, &token).mint(&donor2, &10_000);
+        client.deposit(&donor2, &farmer_b, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_b, &dummy_hash(&env, 2));
+
+        env.ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        client.verify_survival(&farmer_a, &dummy_hash(&env, 3), &80);
+        client.verify_survival(&farmer_b, &dummy_hash(&env, 3), &80);
+    }
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_milestone_proof_replay_as_survival_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            farmer,
+            arbiter,
+            ..
+        } = setup();
+        client.deposit(&funder, &farmer, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer, &dummy_hash(&env, 1));
+
+        env.ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        client.verify_survival(&farmer, &dummy_hash(&env, 1), &80);
     }
 
     // ── Init guard ────────────────────────────────────────────────────────────

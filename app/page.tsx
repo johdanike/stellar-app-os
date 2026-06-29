@@ -14,11 +14,11 @@ import {
   CardDescription,
   CardContent,
 } from '@/components/molecules/Card';
-import { useToast } from '@/hooks/useToast';
 import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal';
+import { useToast } from '@/hooks/useToast';
 import { useAppTranslation } from '@/hooks/useTranslation';
-import { LandingHero } from '@/components/organisms/LandingHero';
-export default function Home(): JSX.Element {
+
+export default function HomePage(): JSX.Element {
   const [showTx, setShowTx] = useState(false);
   const { addToast } = useToast();
   const { t } = useAppTranslation();
@@ -111,14 +111,11 @@ export default function Home(): JSX.Element {
           <Button asChild variant="outline" size="lg" className="w-full">
             <Link href="/api-docs">Explore API Documentation</Link>
           </Button>
-          <Button
-            data-tour-id="purchase-credits-button"
-            asChild
-            variant="outline"
-            size="lg"
-            className="w-full"
-          >
-            <Link href="/credits/purchase">Purchase Carbon Credits</Link>
+          <Button asChild variant="outline" size="lg" className="w-full">
+            <Link href="/leaderboard">View Leaderboard</Link>
+          </Button>
+          <Button asChild variant="outline" size="lg" className="w-full">
+            <Link href="/planter/register">Register as Planter</Link>
           </Button>
         </CardContent>
       </Card>
