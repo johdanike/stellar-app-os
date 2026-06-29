@@ -13,6 +13,13 @@ interface FooterLink {
   href: string;
 }
 
+interface SocialLink {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  ariaLabel: string;
+}
+
 interface FooterSection {
   title: string;
   links: FooterLink[];
