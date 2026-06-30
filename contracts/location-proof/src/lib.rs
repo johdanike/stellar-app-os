@@ -15,9 +15,16 @@
 
 use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Bytes, BytesN,
-    Env,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, Address,
+    Bytes, BytesN, Env,
 };
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum LocationProofError {
+    OutsideNigeriaRegion = 65,
+    ProofCommitmentAlreadyReg = 66,
+}
 
 const ADMIN: &str = "ADMIN";
 
@@ -71,12 +78,12 @@ impl LocationProof {
         Self::require_admin(&env);
 
         if !in_region {
-            panic_with_error!(&env, HarvestaError::OutsideNigeriaRegion);
+            panic_with_error!(&env, LocationProofError::OutsideNigeriaRegion);
         }
 
         // Reject duplicate commitments (replay / double-count)
         if env.storage().persistent().has(&commitment) {
-            panic_with_error!(&env, HarvestaError::ProofCommitmentAlreadyReg);
+            panic_with_error!(&env, LocationProofError::ProofCommitmentAlreadyReg);
         }
 
         let entry = LocationProofEntry {

@@ -729,7 +729,7 @@ mod tests {
     // ── Invasive / high-water flag tests ──────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #65)")]
+    #[should_panic(expected = "Error(Contract, #69)")]
     fn test_invasive_species_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -744,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #66)")]
+    #[should_panic(expected = "Error(Contract, #70)")]
     fn test_high_water_species_rejected() {
         let env = Env::default();
         env.mock_all_auths();
@@ -759,7 +759,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #65)")]
+    #[should_panic(expected = "Error(Contract, #69)")]
     fn test_both_flags_invasive_takes_precedence() {
         let env = Env::default();
         env.mock_all_auths();

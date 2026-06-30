@@ -546,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #65)")]
+    #[should_panic(expected = "Error(Contract, #67)")]
     fn test_get_farmer_verified_non_validator_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -581,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #65)")]
+    #[should_panic(expected = "Error(Contract, #67)")]
     fn test_register_farmer_non_validator_rejected() {
         let (env, _, _, client) = setup();
         let attacker = Address::generate(&env);
@@ -594,7 +594,7 @@ mod tests {
     // ── SHA-256 integrity ─────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #66)")]
+    #[should_panic(expected = "Error(Contract, #68)")]
     fn test_hash_mismatch_on_register_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -606,7 +606,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #66)")]
+    #[should_panic(expected = "Error(Contract, #68)")]
     fn test_hash_mismatch_on_update_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -682,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #65)")]
+    #[should_panic(expected = "Error(Contract, #67)")]
     fn test_profile_history_non_validator_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);

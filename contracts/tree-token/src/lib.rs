@@ -51,10 +51,10 @@ impl TreeToken {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
             panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
-        contract_utils::assert_whitelisted(&env, &tree_token);
         env.storage()
             .instance()
             .set(&symbol_short!("ADMIN"), &admin);
+        contract_utils::add_to_whitelist(&env, &tree_token);
         env.storage()
             .instance()
             .set(&symbol_short!("TOKEN"), &tree_token);

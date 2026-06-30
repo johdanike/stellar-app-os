@@ -33,9 +33,18 @@
 
 use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, xdr::ToXdr, Address,
-    Bytes, BytesN, Env, IntoVal, String,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short,
+    xdr::ToXdr, Address, Bytes, BytesN, Env, IntoVal, String,
 };
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum ZkLocationError {
+    OutsideNigeriaRegion = 65,
+    CommitmentAlreadySubmitted = 67,
+    CommitmentNotFound = 68,
+    CommitmentNotPending = 69,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,7 +145,7 @@ impl ZkLocationVerifier {
 
         let key = Self::verif_key(&env, &commitment);
         if env.storage().persistent().has(&key) {
-            panic_with_error!(&env, HarvestaError::CommitmentAlreadySubmitted);
+            panic_with_error!(&env, ZkLocationError::CommitmentAlreadySubmitted);
         }
 
         let record = LocationVerification {
@@ -192,10 +201,10 @@ impl ZkLocationVerifier {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::CommitmentNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, ZkLocationError::CommitmentNotFound));
 
         if record.status != VerificationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::CommitmentNotPending);
+            panic_with_error!(&env, ZkLocationError::CommitmentNotPending);
         }
 
         record.status = VerificationStatus::Approved;
@@ -243,10 +252,10 @@ impl ZkLocationVerifier {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::CommitmentNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, ZkLocationError::CommitmentNotFound));
 
         if record.status != VerificationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::CommitmentNotPending);
+            panic_with_error!(&env, ZkLocationError::CommitmentNotPending);
         }
 
         record.status = VerificationStatus::Rejected;
@@ -339,7 +348,7 @@ impl ZkLocationVerifier {
                 return;
             }
         }
-        panic_with_error!(env, HarvestaError::OutsideNigeriaRegion);
+        panic_with_error!(env, ZkLocationError::OutsideNigeriaRegion);
     }
 }
 

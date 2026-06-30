@@ -15,10 +15,24 @@
 //!     the seller (farmer) or refund them to the buyer (funder).
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN,
-    Env, IntoVal, Symbol,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, token,
+    Address, BytesN, Env, IntoVal, Symbol,
 };
 use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum MilestoneError {
+    CompletionPercentOutOfRange = 42,
+    MilestoneReleaseBlocked = 43,
+    MilestoneAlreadyProcessed = 44,
+    TotalReleasedExceedsMile = 46,
+    NotBuyerOrSeller = 52,
+    DisputeAlreadyOpen = 53,
+    EscrowAlreadyFinalised = 54,
+    NotArbiter = 55,
+    NoOpenDispute = 56,
+}
 
 /// Percentage released on first milestone verification (basis points: 7500 = 75%)
 const MILESTONE_1_BPS: i128 = 7500;
@@ -184,7 +198,7 @@ impl EscrowMilestone {
         approver.require_auth();
 
         if completion_pct > 100 {
-            panic_with_error!(&env, HarvestaError::CompletionPercentOutOfRange);
+            panic_with_error!(&env, MilestoneError::CompletionPercentOutOfRange);
         }
 
         let key = Self::escrow_key(&env, &milestone_id);
@@ -197,7 +211,7 @@ impl EscrowMilestone {
         let payout = (state.total_amount * completion_pct as i128) / 100;
 
         if state.released + payout > state.total_amount {
-            panic_with_error!(&env, HarvestaError::TotalReleasedExceedsMile);
+            panic_with_error!(&env, MilestoneError::TotalReleasedExceedsMile);
         }
 
         token::Client::new(&env, &state.token).transfer(
@@ -239,10 +253,10 @@ impl EscrowMilestone {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if state.dispute_open {
-            panic_with_error!(&env, HarvestaError::MilestoneReleaseBlocked);
+            panic_with_error!(&env, MilestoneError::MilestoneReleaseBlocked);
         }
         if state.status != EscrowStatus::Funded {
-            panic_with_error!(&env, HarvestaError::MilestoneAlreadyProcessed);
+            panic_with_error!(&env, MilestoneError::MilestoneAlreadyProcessed);
         }
 
         // Replay attack prevention (#481): reject duplicate proof hashes
@@ -362,16 +376,16 @@ impl EscrowMilestone {
 
         // Only the buyer (funder) or seller (farmer) may raise a dispute
         if caller != state.funder && caller != state.farmer {
-            panic_with_error!(&env, HarvestaError::NotBuyerOrSeller);
+            panic_with_error!(&env, MilestoneError::NotBuyerOrSeller);
         }
 
         if state.dispute_open {
-            panic_with_error!(&env, HarvestaError::DisputeAlreadyOpen);
+            panic_with_error!(&env, MilestoneError::DisputeAlreadyOpen);
         }
 
         // Can only dispute while funds are at rest (not yet fully completed/refunded)
         if state.status == EscrowStatus::Completed || state.status == EscrowStatus::Refunded {
-            panic_with_error!(&env, HarvestaError::EscrowAlreadyFinalised);
+            panic_with_error!(&env, MilestoneError::EscrowAlreadyFinalised);
         }
 
         state.dispute_open = true;
@@ -397,11 +411,11 @@ impl EscrowMilestone {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if arbiter != state.arbiter {
-            panic_with_error!(&env, HarvestaError::NotArbiter);
+            panic_with_error!(&env, MilestoneError::NotArbiter);
         }
 
         if !state.dispute_open {
-            panic_with_error!(&env, HarvestaError::NoOpenDispute);
+            panic_with_error!(&env, MilestoneError::NoOpenDispute);
         }
 
         let remainder = state
