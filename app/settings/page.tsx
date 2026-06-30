@@ -1,6 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -13,24 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/molecules/Card';
-import { cn } from '@/lib/utils';
 import { hasCompletedOnboardingTour, requestOnboardingTourRestart } from '@/lib/onboardingTour';
-
-type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
-
-const NAV_ITEMS: { id: TabId; label: string; icon: ReactNode }[] = [
-  { id: 'profile', label: 'Profile', icon: '👤' },
-  { id: 'notifications', label: 'Notifications', icon: '🔔' },
-  { id: 'preferences', label: 'Preferences', icon: '⚙️' },
-  { id: 'danger', label: 'Danger Zone', icon: '⚠️' },
-];
-
-const SECTION_TITLES: Record<TabId, string> = {
-  profile: 'Profile',
-  notifications: 'Notifications',
-  preferences: 'Preferences',
-  danger: 'Danger Zone',
-};
+import { PreferencesSection } from '@/components/organisms/settings/PreferencesSection';
 
 function ProfileSection() {
   return (
@@ -43,13 +26,6 @@ function NotificationSection() {
   return (
     <div>
       <Text variant="muted">Notification settings coming soon.</Text>
-    </div>
-  );
-}
-function PreferencesSection() {
-  return (
-    <div>
-      <Text variant="muted">Preference settings coming soon.</Text>
     </div>
   );
 }

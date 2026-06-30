@@ -22,6 +22,9 @@ use soroban_sdk::{
     Env, IntoVal, Symbol,
 };
 
+/// Maximum allowed slippage in basis points (100% = 10 000 bps).
+const MAX_SLIPPAGE_BPS: u32 = 10_000;
+
 /// Off-ramp delivery method for Nigerian Naira.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -124,6 +127,33 @@ impl NairaPayout {
         }
         if expected_ngn_amount <= 0 {
             panic_with_error!(&env, HarvestaError::ExpectedNgnMustBePositive);
+        }
+
+        // ── Slippage check ────────────────────────────────────────────────────
+        let max_slippage: u32 = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "MaxSlippage"))
+            .unwrap_or(0);
+        let ref_rate: i128 = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "RefRate"))
+            .unwrap_or(0);
+
+        if max_slippage > 0 && ref_rate > 0 {
+            let expected_at_ref = usdc_amount
+                .checked_mul(ref_rate)
+                .expect("rate calc overflow")
+                / 10_000_000;
+            let min_expected = expected_at_ref
+                .checked_mul((10_000 - max_slippage as i128))
+                .expect("slippage calc overflow")
+                / 10_000;
+
+            if expected_ngn_amount < min_expected {
+                panic_with_error!(&env, HarvestaError::SlippageExceeded);
+            }
         }
 
         let min_interval: u64 = env
@@ -305,6 +335,49 @@ impl NairaPayout {
             .get(&symbol_short!("ADMIN"))
             .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized));
         admin.require_auth();
+    }
+
+    // ── Slippage protection ───────────────────────────────────────────────────
+
+    /// Set the maximum acceptable slippage in basis points (e.g., 300 = 3%).
+    /// Pass 0 to disable slippage enforcement.
+    pub fn set_slippage(env: Env, max_slippage_bps: u32) {
+        Self::require_admin(&env);
+        if max_slippage_bps > MAX_SLIPPAGE_BPS {
+            panic_with_error!(&env, HarvestaError::InvalidSlippage);
+        }
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "MaxSlippage"), &max_slippage_bps);
+    }
+
+    /// Set the reference USDC→NGN rate.
+    /// `rate` is the expected NGN amount (in kobo) for 1 unit of USDC (10⁷ stroops).
+    /// Example: 1 USDC = 1 500 NGN → rate = 150 000.
+    pub fn set_reference_rate(env: Env, rate: i128) {
+        Self::require_admin(&env);
+        if rate <= 0 {
+            panic_with_error!(&env, HarvestaError::AmountMustBePositive);
+        }
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "RefRate"), &rate);
+    }
+
+    /// Return the configured max slippage in basis points (0 = disabled).
+    pub fn get_max_slippage(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&Symbol::new(&env, "MaxSlippage"))
+            .unwrap_or(0)
+    }
+
+    /// Return the reference rate, or 0 if not set.
+    pub fn get_reference_rate(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&Symbol::new(&env, "RefRate"))
+            .unwrap_or(0)
     }
 
     // ── Whitelist management ──────────────────────────────────────────────────
@@ -737,5 +810,102 @@ mod tests {
         );
 
         client.reset_daily_payout();
+    }
+
+    // ── Slippage tests ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_slippage_within_tolerance() {
+        let Ctx {
+            env,
+            client,
+            funder,
+            farmer,
+            token,
+            ..
+        } = setup();
+
+        client.set_slippage(&200);   // 2% tolerance
+        client.set_reference_rate(&150_000); // 1 USDC = 1500 NGN
+
+        // usdc=50 000 stroops @ 150 000 rate = 750 kobo at reference
+        // min with 2% = 750 * 9800 / 10000 = 735
+        client.initiate_payout(
+            &funder, &farmer, &token,
+            &50_000, &735,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+
+        let record = client.get_payout(&farmer).unwrap();
+        assert_eq!(record.status, PayoutStatus::Pending);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #114)")]
+    fn test_slippage_exceeded() {
+        let Ctx {
+            env,
+            client,
+            funder,
+            farmer,
+            token,
+            ..
+        } = setup();
+
+        client.set_slippage(&200);
+        client.set_reference_rate(&150_000);
+
+        // 734 < 735 → below the minimum → panic
+        client.initiate_payout(
+            &funder, &farmer, &token,
+            &50_000, &734,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+    }
+
+    #[test]
+    fn test_slippage_disabled_by_default() {
+        let Ctx {
+            env,
+            client,
+            funder,
+            farmer,
+            token,
+            ..
+        } = setup();
+
+        // Without setting slippage or rate, any expected_ngn passes
+        client.initiate_payout(
+            &funder, &farmer, &token,
+            &50_000, &1,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+
+        let record = client.get_payout(&farmer).unwrap();
+        assert_eq!(record.status, PayoutStatus::Pending);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #115)")]
+    fn test_set_invalid_slippage() {
+        let Ctx { env, client, .. } = setup();
+        client.set_slippage(&10_001);
+    }
+
+    #[test]
+    fn test_get_slippage_config() {
+        let Ctx { env: _env, client, .. } = setup();
+
+        assert_eq!(client.get_max_slippage(), 0);
+        assert_eq!(client.get_reference_rate(), 0);
+
+        client.set_slippage(&500);
+        client.set_reference_rate(&150_000);
+
+        assert_eq!(client.get_max_slippage(), 500);
+        assert_eq!(client.get_reference_rate(), 150_000);
     }
 }
