@@ -22,6 +22,7 @@
     "generate-icons": "node scripts/generate-icons.mjs",
     "indexer": "tsx lib/indexer/worker.ts",
     "indexer:events": "tsx lib/indexer/event-worker.ts",
+    "monitor:treasury": "tsx lib/monitor/worker.ts",
     "db:migrate": "node scripts/run-migrations.mjs",
     "db:migrate:status": "node scripts/run-migrations.mjs status",
     "db:migrate:validate": "node scripts/run-migrations.mjs validate",

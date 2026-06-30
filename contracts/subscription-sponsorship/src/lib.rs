@@ -19,6 +19,15 @@
 //! 3. **`cancel_subscription`** — Sponsor can cancel at any time. The locked
 //!    (unreleased) amount for the current cycle is refunded to the sponsor.
 //!
+//! ## SEP-41 Allowance Integration
+//!
+//! The contract integrates with the SEP-41 token allowance interface for
+//! automated recurring debits. Sponsors pre-approve the contract as a spender
+//! on the token contract via `approve()`. The contract executor (keeper/cron)
+//! then calls `process()` which uses `transfer_from` to draw the next cycle's
+//! amount from the sponsor's pre-approved allowance. If the allowance or
+//! balance is insufficient, the subscription cancels gracefully.
+//!
 //! ## Integration
 //!
 //! This contract handles the recurring payment and fund flow. Future iterations
@@ -28,7 +37,7 @@
 //! tree escrows in the tree-escrow contract using those funds.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Env, Vec,
+    contract, contractimpl, contracttype, symbol_short, token, Address, Env, IntoVal, Vec,
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -190,8 +199,10 @@ impl SubscriptionSponsorship {
     /// Process a subscription cycle. Callable by anyone (keeper / cron).
     ///
     /// Transfers the locked amount to the farmer, then locks the next cycle's
-    /// amount from the sponsor. If the sponsor has insufficient balance for
-    /// the next cycle, the subscription is cancelled automatically.
+    /// amount from the sponsor using the SEP-41 pre-approved allowance
+    /// (`transfer_from`). The sponsor must have previously approved this
+    /// contract as a spender on the token contract. If the allowance or
+    /// balance is insufficient, the subscription is cancelled automatically.
     ///
     /// * `subscription_id` — ID of the subscription to process
     pub fn process(env: Env, subscription_id: u64) {
@@ -223,20 +234,38 @@ impl SubscriptionSponsorship {
         rec.total_amount_spent += rec.amount_per_cycle;
         rec.total_trees_sponsored += rec.trees_per_cycle;
 
-        // Try to lock the next cycle's amount from the sponsor.
-        // If the transfer fails (insufficient balance), cancel the subscription
-        // gracefully rather than panicking.
-        let lock_next = || {
-            token::Client::new(&env, &rec.token).transfer(
+        // Lock the next cycle's amount from the sponsor using the SEP-41
+        // pre-approved allowance. The sponsor must have called `approve()`
+        // on the token contract, granting this contract an allowance.
+        // We check both the allowance and the balance before attempting
+        // the transfer. If either is insufficient, cancel gracefully.
+        let token_client = token::Client::new(&env, &rec.token);
+        let allowance = token_client.allowance(
+            &rec.sponsor,
+            &env.current_contract_address(),
+        );
+        let balance = token_client.balance(&rec.sponsor);
+
+        if allowance >= rec.amount_per_cycle && balance >= rec.amount_per_cycle {
+            token_client.transfer_from(
+                &env.current_contract_address(),
                 &rec.sponsor,
                 &env.current_contract_address(),
                 &rec.amount_per_cycle,
+            );
+            rec.next_processing = now + rec.interval_seconds;
+        } else {
+            // Insufficient allowance or balance — cancel gracefully
+            rec.status = SubscriptionStatus::Cancelled;
+            env.events().publish(
+                (symbol_short!("sub"), symbol_short!("cancel")),
+                (subscription_id, rec.sponsor.clone(), symbol_short!("no_funds")),
             );
         };
 
         // `env.try()` catches panics from the closure and returns `Result<T, Error>`.
         // Since `transfer()` returns `()`, the result is `Result<(), Error>`.
-        match env.try(lock_next) {
+        match env.r#try(lock_next) {
             Ok(_) => {
                 rec.next_processing = now + rec.interval_seconds;
                 // Keep status as Active
@@ -382,6 +411,7 @@ mod tests {
         Address,
         Address,
         Address,
+        Address,
         SubscriptionSponsorshipClient<'static>,
     ) {
         let env = Env::default();
@@ -403,7 +433,7 @@ mod tests {
 
         client.initialize(&admin, &xlm, &usdc);
 
-        (env, admin, sponsor, farmer, xlm, usdc, client)
+        (env, admin, sponsor, farmer, xlm, usdc, contract_id, client)
     }
 
     // ── initialize ───────────────────────────────────────────────────────────
@@ -428,7 +458,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "already initialized")]
     fn test_initialize_rejects_double_init() {
-        let (_env, _admin, sponsor, _farmer, xlm, usdc, client) = setup();
+        let (_env, _admin, sponsor, _farmer, xlm, usdc, _contract_id, client) = setup();
 
         // Try second init — should panic
         client.initialize(&sponsor, &xlm, &usdc);
@@ -438,11 +468,11 @@ mod tests {
 
     #[test]
     fn test_setup_subscription_locks_first_cycle() {
-        let (env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (env, _admin, sponsor, farmer, xlm, _usdc, contract_id, client) = setup();
 
         let balance_before = token::Client::new(&env, &xlm).balance(&sponsor);
         let contract_balance_before =
-            token::Client::new(&env, &xlm).balance(&env.current_contract_address());
+            token::Client::new(&env, &xlm).balance(&contract_id);
 
         let amount: i128 = 1_000;
         let trees: u32 = 1;
@@ -451,7 +481,7 @@ mod tests {
 
         let balance_after = token::Client::new(&env, &xlm).balance(&sponsor);
         let contract_balance_after =
-            token::Client::new(&env, &xlm).balance(&env.current_contract_address());
+            token::Client::new(&env, &xlm).balance(&contract_id);
 
         // Sponsor paid amount_per_cycle
         assert_eq!(balance_before - balance_after, amount);
@@ -471,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_setup_subscription_defaults_to_monthly_interval() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         let id = client.setup(&sponsor, &farmer, &xlm, &1_000, &1, &0);
 
@@ -481,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_setup_autoincrements_id() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         let id1 = client.setup(&sponsor, &farmer, &xlm, &500, &1, &MONTHLY_INTERVAL);
         let id2 = client.setup(&sponsor, &farmer, &xlm, &500, &1, &MONTHLY_INTERVAL);
@@ -492,28 +522,28 @@ mod tests {
     #[test]
     #[should_panic(expected = "amount_per_cycle must be positive")]
     fn test_setup_rejects_zero_amount() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
         client.setup(&sponsor, &farmer, &xlm, &0, &1, &MONTHLY_INTERVAL);
     }
 
     #[test]
     #[should_panic(expected = "trees_per_cycle must be between 1 and 50")]
     fn test_setup_rejects_zero_trees() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
         client.setup(&sponsor, &farmer, &xlm, &1_000, &0, &MONTHLY_INTERVAL);
     }
 
     #[test]
     #[should_panic(expected = "trees_per_cycle must be between 1 and 50")]
     fn test_setup_rejects_excessive_trees() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
         client.setup(&sponsor, &farmer, &xlm, &1_000, &51, &MONTHLY_INTERVAL);
     }
 
     #[test]
     #[should_panic(expected = "unsupported token")]
     fn test_setup_rejects_unsupported_token() {
-        let (env, _admin, sponsor, farmer, _xlm, _usdc, client) = setup();
+        let (env, _admin, sponsor, farmer, _xlm, _usdc, _contract_id, client) = setup();
         let bad_token = Address::generate(&env);
         client.setup(&sponsor, &farmer, &bad_token, &1_000, &1, &MONTHLY_INTERVAL);
     }
@@ -522,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_process_subscription_sends_to_farmer_and_locks_next() {
-        let (env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (env, _admin, sponsor, farmer, xlm, _usdc, contract_id, client) = setup();
 
         // Sponsor has 100_000 XLM, need enough for at least 2 cycles
         let amount: i128 = 1_000;
@@ -530,6 +560,15 @@ mod tests {
 
         // Mint more tokens to sponsor for multiple cycles
         token::StellarAssetClient::new(&env, &xlm).mint(&sponsor, &10_000);
+
+        // Set up SEP-41 allowance so the contract can pull the next cycle
+        let expiration = env.ledger().sequence() + 50000;
+        token::Client::new(&env, &xlm).approve(
+            &sponsor,
+            &contract_id,
+            &100_000_000,
+            &expiration,
+        );
 
         let id = client.setup(&sponsor, &farmer, &xlm, &amount, &trees, &MONTHLY_INTERVAL);
 
@@ -547,7 +586,7 @@ mod tests {
             amount
         );
 
-        // Sponsor paid for the next cycle (locked into contract)
+        // Sponsor paid for the next cycle (locked into contract via transfer_from)
         assert_eq!(
             sponsor_balance_before - token::Client::new(&env, &xlm).balance(&sponsor),
             amount
@@ -561,7 +600,7 @@ mod tests {
 
     #[test]
     fn test_process_subscription_supports_multiple_intervals() {
-        let (env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (env, _admin, sponsor, farmer, xlm, _usdc, contract_id, client) = setup();
 
         let amount: i128 = 500;
         let trees: u32 = 1;
@@ -569,6 +608,15 @@ mod tests {
 
         // Mint enough for many cycles
         token::StellarAssetClient::new(&env, &xlm).mint(&sponsor, &100_000);
+
+        // Set up SEP-41 allowance for recurring debits
+        let expiration = env.ledger().sequence() + 50000;
+        token::Client::new(&env, &xlm).approve(
+            &sponsor,
+            &contract_id,
+            &100_000_000,
+            &expiration,
+        );
 
         let id = client.setup(&sponsor, &farmer, &xlm, &amount, &trees, &interval);
 
@@ -587,7 +635,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "IntervalNotElapsed")]
     fn test_process_subscription_fails_before_interval() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         let id = client.setup(&sponsor, &farmer, &xlm, &1_000, &1, &MONTHLY_INTERVAL);
 
@@ -614,11 +662,13 @@ mod tests {
         let amount: i128 = 5_000;
         token::StellarAssetClient::new(&env, &xlm).mint(&sponsor, &amount);
 
+        // No SEP-41 allowance set up — process() will fail to pull next cycle
+
         client.initialize(&admin, &xlm, &usdc);
 
         let id = client.setup(&sponsor, &farmer, &xlm, &amount, &1, &MONTHLY_INTERVAL);
 
-        // Advance time and process — sponsor has no more funds
+        // Advance time and process — sponsor has no more funds and no allowance
         env.ledger().with_mut(|l| l.timestamp += MONTHLY_INTERVAL + 1);
         client.process(&id);
 
@@ -631,7 +681,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "subscription is not active")]
     fn test_process_cancelled_subscription_panics() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         let id = client.setup(&sponsor, &farmer, &xlm, &1_000, &1, &MONTHLY_INTERVAL);
 
@@ -648,13 +698,13 @@ mod tests {
 
     #[test]
     fn test_cancel_subscription_refunds_locked_amount() {
-        let (env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (env, _admin, sponsor, farmer, xlm, _usdc, contract_id, client) = setup();
 
         let amount: i128 = 1_000;
         let id = client.setup(&sponsor, &farmer, &xlm, &amount, &1, &MONTHLY_INTERVAL);
 
         let balance_before = token::Client::new(&env, &xlm).balance(&sponsor);
-        let contract_before = token::Client::new(&env, &xlm).balance(&env.current_contract_address());
+        let contract_before = token::Client::new(&env, &xlm).balance(&contract_id);
 
         client.cancel(&sponsor, &id);
 
@@ -664,7 +714,7 @@ mod tests {
             amount
         );
         assert_eq!(
-            contract_before - token::Client::new(&env, &xlm).balance(&env.current_contract_address()),
+            contract_before - token::Client::new(&env, &xlm).balance(&contract_id),
             amount
         );
 
@@ -675,7 +725,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "not the sponsor")]
     fn test_cancel_subscription_rejects_unauthorized() {
-        let (env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         let id = client.setup(&sponsor, &farmer, &xlm, &1_000, &1, &MONTHLY_INTERVAL);
 
@@ -686,7 +736,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "subscription is not active")]
     fn test_cancel_already_cancelled_subscription_panics() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         let id = client.setup(&sponsor, &farmer, &xlm, &1_000, &1, &MONTHLY_INTERVAL);
 
@@ -700,7 +750,7 @@ mod tests {
 
     #[test]
     fn test_get_sponsor_subscriptions_returns_all_for_sponsor() {
-        let (_env, _admin, sponsor, farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, sponsor, farmer, xlm, _usdc, _contract_id, client) = setup();
 
         // Create multiple subscriptions for the same sponsor
         let id1 = client.setup(&sponsor, &farmer, &xlm, &500, &1, &MONTHLY_INTERVAL);
@@ -719,7 +769,7 @@ mod tests {
 
     #[test]
     fn test_get_sponsor_subscriptions_returns_empty_for_none() {
-        let (_env, _admin, _sponsor, _farmer, xlm, _usdc, client) = setup();
+        let (_env, _admin, _sponsor, _farmer, _xlm, _usdc, _contract_id, client) = setup();
 
         let nobody = Address::generate(&_env);
         let ids = client.get_sponsor_subscriptions(&nobody);
@@ -730,7 +780,7 @@ mod tests {
 
     #[test]
     fn test_update_tokens_changes_supported_tokens() {
-        let (env, admin, sponsor, farmer, _xlm, _usdc, client) = setup();
+        let (env, admin, sponsor, farmer, _xlm, _usdc, _contract_id, client) = setup();
 
         let new_xlm = env.register_stellar_asset_contract(admin.clone());
         let new_usdc = env.register_stellar_asset_contract(admin.clone());

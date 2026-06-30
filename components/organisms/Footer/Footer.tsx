@@ -16,20 +16,13 @@ interface FooterLink {
 interface SocialLink {
   label: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   ariaLabel: string;
 }
 
 interface FooterSection {
   title: string;
   links: FooterLink[];
-}
-
-interface SocialLink {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  ariaLabel: string;
 }
 
 function buildFooterSections(t: TFunction): FooterSection[] {
