@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
 import { Counter } from '@/components/atoms/Counter';
 import { OnboardingTour } from '@/components/organisms/OnboardingTour/OnboardingTour';
+import { LandingHero } from '@/components/organisms/LandingHero';
 import SocialShareButtons from '@/components/SocialShareButtons';
 import {
   Card,
@@ -14,8 +15,14 @@ import {
   CardDescription,
   CardContent,
 } from '@/components/molecules/Card';
-import { OnboardingTour } from '@/components/organisms/OnboardingTour/OnboardingTour';
-import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
+import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal';
+import { useToast } from '@/hooks/useToast';
+import { useAppTranslation } from '@/hooks/useTranslation';
+
+export default function HomePage(): JSX.Element {
+  const [showTx, setShowTx] = useState(false);
+  const { addToast } = useToast();
+  const { t } = useAppTranslation();
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">

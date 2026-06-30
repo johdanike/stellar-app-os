@@ -34,7 +34,7 @@
 use harvesta_errors::HarvestaError;
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, xdr::ToXdr, Address,
-    Bytes, BytesN, Env, IntoVal, String,
+    Bytes, BytesN, Env, IntoVal,
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -71,10 +71,8 @@ pub enum CachedProofResult {
 pub struct LocationVerification {
     /// Farmer's Stellar wallet address
     pub farmer: Address,
-    /// SHA-256(lat || lon || nonce) — exact coordinates never stored on-chain
-    pub commitment: BytesN<32>,
-    /// 2-char geohash prefix submitted by farmer (public, low-precision)
-    pub region_geohash: String,
+    /// Index into the approved geohash prefix list (0=s0 .. 8=s8)
+    pub region_index: u32,
     /// Ledger timestamp when the commitment was submitted
     pub submitted_at: u64,
     /// Current verification status
@@ -117,22 +115,22 @@ impl ZkLocationVerifier {
 
     /// Step 1 — Farmer submits a location commitment without revealing coordinates.
     ///
-    /// `farmer`         — must sign; their wallet ties the commitment to an identity
-    /// `commitment`     — SHA-256(lat_bytes || lon_bytes || nonce)
-    /// `region_geohash` — 2-char Northern Nigeria prefix (e.g. "s1")
+    /// `farmer`        — must sign; their wallet ties the commitment to an identity
+    /// `commitment`    — SHA-256(lat_bytes || lon_bytes || nonce)
+    /// `region_index`  — index into the approved geohash prefix list (0=s0 .. 8=s8)
     ///
-    /// Panics if the commitment is already registered or if `region_geohash` is
+    /// Panics if the commitment is already registered or if `region_index` is
     /// outside the approved Northern Nigeria boundary.
     pub fn submit_commitment(
         env: Env,
         farmer: Address,
         commitment: BytesN<32>,
-        region_geohash: String,
+        region_index: u32,
     ) {
         farmer.require_auth();
 
-        // Validate the public geohash prefix before accepting the commitment
-        Self::assert_northern_nigeria(&env, &region_geohash);
+        // Validate the region index is within the approved Northern Nigeria set
+        Self::assert_northern_nigeria(&env, region_index);
 
         let key = Self::verif_key(&env, &commitment);
         if env.storage().persistent().has(&key) {
@@ -141,8 +139,7 @@ impl ZkLocationVerifier {
 
         let record = LocationVerification {
             farmer: farmer.clone(),
-            commitment: commitment.clone(),
-            region_geohash,
+            region_index,
             submitted_at: env.ledger().timestamp(),
             status: VerificationStatus::Pending,
             verified_at: 0,
@@ -330,16 +327,13 @@ impl ZkLocationVerifier {
     }
 
     /// Approved 2-character geohash prefixes covering Northern Nigeria
-    /// (approx. 9°N–14°N, 3°E–15°E). This is the public boundary check;
-    /// the ZK circuit enforces the exact coordinate-level boundary.
-    fn assert_northern_nigeria(env: &Env, region: &String) {
-        const VALID: [&str; 9] = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
-        for prefix in VALID {
-            if *region == String::from_str(env, prefix) {
-                return;
-            }
+    /// (approx. 9°N–14°N, 3°E–15°E). Index 0 = "s0" through 8 = "s8".
+    /// This is the public boundary check; the ZK circuit enforces the exact
+    /// coordinate-level boundary.
+    fn assert_northern_nigeria(env: &Env, region_index: u32) {
+        if region_index > 8 {
+            panic_with_error!(env, HarvestaError::OutsideNigeriaRegion);
         }
-        panic_with_error!(env, HarvestaError::OutsideNigeriaRegion);
     }
 }
 
@@ -350,7 +344,7 @@ mod tests {
     use super::*;
     use soroban_sdk::{
         testutils::{Address as _, Ledger as _},
-        Address, BytesN, Env, String,
+        Address, BytesN, Env,
     };
 
     fn setup() -> (Env, Address, ZkLocationVerifierClient<'static>) {
@@ -377,7 +371,7 @@ mod tests {
         let farmer = Address::generate(&env);
         let c = commitment(&env, 1);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s1"));
+        client.submit_commitment(&farmer, &c, &1);
 
         let record = client.get_verification(&c).unwrap();
         assert_eq!(record.status, VerificationStatus::Pending);
@@ -404,7 +398,7 @@ mod tests {
         let farmer = Address::generate(&env);
         let c = commitment(&env, 2);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s3"));
+        client.submit_commitment(&farmer, &c, &3);
         client.reject_location(&c);
 
         let record = client.get_verification(&c).unwrap();
@@ -413,14 +407,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #120)")]
     fn test_duplicate_commitment_rejected() {
         let (env, _, client) = setup();
         let farmer = Address::generate(&env);
         let c = commitment(&env, 3);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s1"));
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s1"));
+        client.submit_commitment(&farmer, &c, &1);
+        client.submit_commitment(&farmer, &c, &1);
     }
 
     #[test]
@@ -430,7 +424,7 @@ mod tests {
         let farmer = Address::generate(&env);
 
         // "e7" is in East Africa — outside Northern Nigeria
-        client.submit_commitment(&farmer, &commitment(&env, 4), &String::from_str(&env, "e7"));
+        client.submit_commitment(&farmer, &commitment(&env, 4), &99);
     }
 
     // ── Proof caching (#399) ──────────────────────────────────────────────────
@@ -443,7 +437,7 @@ mod tests {
         let farmer = Address::generate(&env);
         let c = commitment(&env, 5);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s2"));
+        client.submit_commitment(&farmer, &c, &2);
         let pd = proof_digest(&env, 5);
         client.approve_location(&c, &pd);
         // Second call must NOT panic; it returns from the cache.
@@ -454,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #69)")]
+    #[should_panic(expected = "Error(Contract, #122)")]
     fn test_cache_miss_with_different_proof_digest_falls_through() {
         // A different proof_digest for the same commitment is a cache miss
         // and falls through to the pre-existing "not Pending" panic — proving
@@ -463,7 +457,7 @@ mod tests {
         let farmer = Address::generate(&env);
         let c = commitment(&env, 50);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s2"));
+        client.submit_commitment(&farmer, &c, &2);
         client.approve_location(&c, &proof_digest(&env, 50));
         client.approve_location(&c, &proof_digest(&env, 51));
     }
@@ -474,7 +468,7 @@ mod tests {
         let farmer = Address::generate(&env);
         let c = commitment(&env, 60);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s3"));
+        client.submit_commitment(&farmer, &c, &3);
         client.reject_location(&c);
         client.reject_location(&c); // cache hit — must not panic
 
@@ -502,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #69)")]
+    #[should_panic(expected = "Error(Contract, #122)")]
     fn test_proof_cache_disabled_when_ttl_zero() {
         // With TTL=0 the cache is bypassed; replay falls through to the
         // pre-existing "not Pending" panic.
@@ -515,7 +509,7 @@ mod tests {
 
         let farmer = Address::generate(&env);
         let c = commitment(&env, 70);
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s1"));
+        client.submit_commitment(&farmer, &c, &1);
         let pd = proof_digest(&env, 70);
         client.approve_location(&c, &pd);
         client.approve_location(&c, &pd); // must panic — cache disabled
@@ -530,8 +524,7 @@ mod tests {
 
     #[test]
     fn test_all_northern_nigeria_prefixes_accepted() {
-        let prefixes = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
-        for (i, prefix) in prefixes.iter().enumerate() {
+        for i in 0..9 {
             let env = Env::default();
             env.mock_all_auths();
             let contract_id = env.register_contract(None, ZkLocationVerifier);
@@ -543,7 +536,7 @@ mod tests {
             client.submit_commitment(
                 &farmer,
                 &commitment(&env, i as u8),
-                &String::from_str(&env, prefix),
+                &i,
             );
             let record = client.get_verification(&commitment(&env, i as u8)).unwrap();
             assert_eq!(record.status, VerificationStatus::Pending);
@@ -556,7 +549,7 @@ mod tests {
         let farmer = Address::generate(&env);
         let c = commitment(&env, 6);
 
-        client.submit_commitment(&farmer, &c, &String::from_str(&env, "s1"));
+        client.submit_commitment(&farmer, &c, &1);
         assert!(client.get_proof_digest(&c).is_none());
     }
 }

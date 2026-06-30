@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from '@/components/molecules/Card';
 import { hasCompletedOnboardingTour, requestOnboardingTourRestart } from '@/lib/onboardingTour';
+import { PreferencesSection } from '@/components/organisms/settings/PreferencesSection';
 
 function ProfileSection() {
   return (
@@ -25,13 +26,6 @@ function NotificationSection() {
   return (
     <div>
       <Text variant="muted">Notification settings coming soon.</Text>
-    </div>
-  );
-}
-function PreferencesSection() {
-  return (
-    <div>
-      <Text variant="muted">Preference settings coming soon.</Text>
     </div>
   );
 }

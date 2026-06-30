@@ -5,8 +5,7 @@ import { Footer } from '@/components/organisms/Footer/Footer';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ToastContainer } from '@/components/ui/toast';
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
 const siteName = 'FarmCredit';
 const siteDescription = 'FarmCredit - Decentralized agricultural credit on Stellar';
 const ogImage = '/icons/icon-512x512.png';
@@ -86,12 +85,46 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="FarmCredit" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`}>
-        <ToastProvider>
-          {children}
-          <ToastContainer />
-        </ToastProvider>
-        <Footer />
+      <body className="font-sans antialiased">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`
+            (function() {
+              try {
+                var stored = localStorage.getItem('theme');
+                var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var resolved = stored === 'light' ? 'light' : stored === 'dark' ? 'dark' : (prefersDark ? 'dark' : 'light');
+                document.documentElement.classList.toggle('dark', resolved === 'dark');
+                if (stored === 'light' || stored === 'dark' || stored === 'system') {
+                  document.documentElement.dataset.theme = stored;
+                }
+                document.documentElement.classList.add('no-transitions');
+                window.addEventListener('load', function() {
+                  document.documentElement.classList.remove('no-transitions');
+                });
+              } catch(e) {}
+            })();
+          `}
+        </Script>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Skip to content
+        </a>
+        <QueryProvider>
+          <WalletProviderWrapper>
+            <FavoritesProvider>
+              <ToastProvider>
+                <CookieBanner />
+                <Header />
+                <main id="main" tabIndex={-1}>
+                  {children}
+                </main>
+                <Footer />
+              </ToastProvider>
+            </FavoritesProvider>
+          </WalletProviderWrapper>
+        </QueryProvider>
       </body>
     </html>
   );
