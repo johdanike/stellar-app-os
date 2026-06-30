@@ -1,1 +1,1 @@
-setsid -w pnpm build
+pnpm build
