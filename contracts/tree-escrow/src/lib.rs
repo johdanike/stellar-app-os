@@ -58,6 +58,9 @@ const SIX_MONTHS_SECS: u64 = 60 * 60 * 24 * 7 * 26;
 /// Window in which a sponsor may challenge a verification outcome (#469)
 const DISPUTE_WINDOW_SECS: u64 = 60 * 60 * 24 * 7;
 
+/// 14 days in seconds — unaccepted jobs expire after this window (Closes #517)
+const JOB_EXPIRY_SECS: u64 = 60 * 60 * 24 * 14;
+
 /// Maximum slots per batch deposit (Stellar operation limit safety margin)
 const MAX_BATCH_SIZE: u32 = 50;
 
@@ -77,6 +80,8 @@ pub enum EscrowStatus {
     Survived,
     Completed,
     Refunded,
+    /// Sponsor refunded because no planter accepted within 14 days (Closes #517)
+    JobExpired,
 }
 
 #[contracttype]
@@ -99,6 +104,8 @@ pub struct EscrowRecord {
     pub survival_proof: BytesN<32>,
     pub survival_rate_percent: u32,
     pub year_proof: BytesN<32>,
+    /// Ledger timestamp after which the job can be expired if still unaccepted (Closes #517)
+    pub expiry_deadline: u64,
 }
 
 /// A single slot in a batch deposit: one farmer address and the amount for that tree.
@@ -385,6 +392,7 @@ impl TreeEscrow {
                 survival_proof: empty_hash.clone(),
                 survival_rate_percent: 0,
                 year_proof: empty_hash,
+                expiry_deadline: env.ledger().timestamp() + JOB_EXPIRY_SECS,
             },
         );
 
@@ -454,6 +462,7 @@ impl TreeEscrow {
                     survival_proof: empty_hash.clone(),
                     survival_rate_percent: 0,
                     year_proof: empty_hash,
+                    expiry_deadline: env.ledger().timestamp() + JOB_EXPIRY_SECS,
                 },
             );
             env.events()
@@ -715,6 +724,42 @@ impl TreeEscrow {
 
         env.events()
             .publish((symbol_short!("refund"), farmer), rec.total_amount);
+    }
+
+    /// Expires a job that has never been accepted by a planter.
+    ///
+    /// Any caller may trigger expiry once `expiry_deadline` has passed and the
+    /// escrow is still in `Funded` status (i.e. no planter has started work).
+    /// The full deposit is returned to the sponsor and a `JobExpired` event is
+    /// emitted. Closes #517.
+    pub fn expire_job(env: Env, farmer: Address) {
+        let key = DataKey::Escrow(farmer.clone());
+        let mut rec: EscrowRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("no escrow for farmer");
+
+        if rec.status != EscrowStatus::Funded {
+            panic!("job cannot be expired: planting already started or job already closed");
+        }
+
+        let now = env.ledger().timestamp();
+        if now < rec.expiry_deadline {
+            panic!("expiry deadline has not yet passed");
+        }
+
+        token::Client::new(&env, &rec.token).transfer(
+            &env.current_contract_address(),
+            &rec.donor,
+            &rec.total_amount,
+        );
+
+        rec.status = EscrowStatus::JobExpired;
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("jobexpir"), farmer), rec.total_amount);
     }
 
     pub fn get_record(env: Env, farmer: Address) -> Option<EscrowRecord> {
@@ -1585,6 +1630,61 @@ mod tests {
         ctx.client
             .verify_progress(&ctx.farmer, &proof(&ctx.env, 1), &42);
         ctx.client.refund(&ctx.farmer);
+    }
+
+    // ── expire_job (#517) ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_expire_job_happy_path() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+
+        // Advance time past the 14-day deadline.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += JOB_EXPIRY_SECS + 1);
+
+        let pre_balance = balance(&ctx.env, &ctx.token, &ctx.donor);
+        ctx.client.expire_job(&ctx.farmer);
+
+        // Sponsor refunded in full.
+        assert_eq!(
+            balance(&ctx.env, &ctx.token, &ctx.donor) - pre_balance,
+            10_000
+        );
+        assert_eq!(
+            ctx.client.get_record(&ctx.farmer).unwrap().status,
+            EscrowStatus::JobExpired
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "expiry deadline has not yet passed")]
+    fn test_expire_job_too_early_rejected() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+
+        // Only 1 day has passed — well before the 14-day deadline.
+        ctx.env.ledger().with_mut(|l| l.timestamp += 86_400);
+        ctx.client.expire_job(&ctx.farmer);
+    }
+
+    #[test]
+    #[should_panic(expected = "job cannot be expired: planting already started or job already closed")]
+    fn test_expire_job_after_planting_rejected() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+        ctx.client
+            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &5);
+
+        // Even if time has elapsed, a planted job cannot be expired.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += JOB_EXPIRY_SECS + 1);
+        ctx.client.expire_job(&ctx.farmer);
     }
 
     #[test]
