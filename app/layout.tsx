@@ -7,6 +7,7 @@ import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrap
 import { FavoritesProvider } from '@/contexts/FavouritesContext';
 import { CookieBanner } from '@/components/CookieBanner';
 import { ToastProvider } from '@/contexts/ToastContext';
+import { ToastProvider as LegacyToastProvider } from '@/components/providers/ToastProvider';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
 const siteName = 'FarmCredit';
@@ -116,12 +117,17 @@ export default function RootLayout({
           <WalletProviderWrapper>
             <FavoritesProvider>
               <ToastProvider>
-                <CookieBanner />
-                <Header />
-                <main id="main" tabIndex={-1}>
-                  {children}
-                </main>
-                <Footer />
+                {/* LegacyToastProvider wraps the older `components/providers/ToastProvider`
+                    which is consumed by `@/hooks/useToast` and `SocialShareButtons`.
+                    The newer `contexts/ToastContext` above handles modern toasts. */}
+                <LegacyToastProvider>
+                  <CookieBanner />
+                  <Header />
+                  <main id="main" tabIndex={-1}>
+                    {children}
+                  </main>
+                  <Footer />
+                </LegacyToastProvider>
               </ToastProvider>
             </FavoritesProvider>
           </WalletProviderWrapper>
