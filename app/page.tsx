@@ -16,6 +16,7 @@ import {
   CardContent,
 } from '@/components/molecules/Card';
 import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal';
+import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
 import { useToast } from '@/hooks/useToast';
 import { useAppTranslation } from '@/hooks/useTranslation';
 

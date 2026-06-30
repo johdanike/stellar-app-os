@@ -2,8 +2,11 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Header } from '@/components/organisms/Header/Header';
 import { Footer } from '@/components/organisms/Footer/Footer';
+import { QueryProvider } from '@/components/providers/QueryProvider';
+import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrapper';
+import { FavoritesProvider } from '@/contexts/FavouritesContext';
+import { CookieBanner } from '@/components/CookieBanner';
 import { ToastProvider } from '@/contexts/ToastContext';
-import { ToastContainer } from '@/components/ui/toast';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
 const siteName = 'FarmCredit';
@@ -68,8 +71,6 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
 };
-
-import { QueryProvider } from '@/components/providers/QueryProvider';
 
 export default function RootLayout({
   children,
