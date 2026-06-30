@@ -69,6 +69,11 @@ pub enum HarvestaError {
     AuctionExpired = 112,
     BidBelowReservePrice = 113,
 
+    // ── Tree registry (88–90) ─────────────────────────────────────────────────
+    NotFound = 88,
+    InvalidStatus = 89,
+    NotAuthorized = 90,
+
     // ── Arithmetic overflows (86–87) ──────────────────────────────────────────
     TreeTokenMintOverflow = 86,
     TokenUnitOverflow = 87,
