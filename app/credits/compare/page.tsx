@@ -5,14 +5,15 @@ import { useRouter } from 'next/navigation';
 import { ComparisonTool } from '@/components/organisms/ComparisonTool/ComparisonTool';
 import { mockCarbonProjects } from '@/lib/api/mock/carbonProjects';
 import { Text } from '@/components/atoms/Text';
+import { useAppTranslation } from '@/hooks/useTranslation';
 
-export default function ComparePage(): JSX.Element {
+export default function ComparePage() {
   const router = useRouter();
   const { t } = useAppTranslation();
 
   const handleAddToCart = useCallback(
     (projectId: string) => {
-      console.log('Adding project to cart:', projectId);
+      console.info('Adding project to cart:', projectId);
       router.push(`/credits/purchase?projectId=${projectId}`);
     },
     [router]
