@@ -11,6 +11,7 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short,
     Address, BytesN, Env, IntoVal, String,
 };
+use admin_controls::AdminControlsClient;
 
 // ── Errors ────────────────────────────────────────────────────────────────────
 
@@ -60,14 +61,17 @@ pub struct PlanterRegistry;
 
 #[contractimpl]
 impl PlanterRegistry {
-    /// One-time initialisation — store admin address.
-    pub fn initialize(env: Env, admin: Address) {
+    /// One-time initialisation — store admin address and admin-controls address.
+    pub fn initialize(env: Env, admin: Address, admin_controls: Address) {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
             panic_with_error!(&env, Error::AlreadyInitialized);
         }
         env.storage()
             .instance()
             .set(&symbol_short!("ADMIN"), &admin);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("ADMC"), &admin_controls);
     }
 
     /// Register a new planter.
@@ -79,6 +83,7 @@ impl PlanterRegistry {
         name_hash: BytesN<32>,
         region: String,
     ) -> PlanterRecord {
+        Self::assert_not_paused(&env);
         wallet.require_auth();
 
         if env
@@ -124,6 +129,7 @@ impl PlanterRegistry {
     ///
     /// Only callable by the contract admin (typically the escrow contract).
     pub fn increment_score(env: Env, wallet: Address) {
+        Self::assert_not_paused(&env);
         Self::require_admin(&env);
 
         let key = Self::planter_key(&env, &wallet);
@@ -147,6 +153,7 @@ impl PlanterRegistry {
     /// Only callable by the contract admin (typically the dispute-resolver).
     /// Score floor is 0 — will not underflow.
     pub fn slash_score(env: Env, wallet: Address) {
+        Self::assert_not_paused(&env);
         Self::require_admin(&env);
 
         let key = Self::planter_key(&env, &wallet);
@@ -180,6 +187,7 @@ impl PlanterRegistry {
         verif_passed: u32,
         verif_total: u32,
     ) {
+        Self::assert_not_paused(&env);
         Self::require_admin(&env);
 
         let key = Self::planter_key(&env, &wallet);
@@ -235,6 +243,19 @@ impl PlanterRegistry {
         (symbol_short!("PLANTER"), wallet.clone()).into_val(env)
     }
 
+    fn admin_controls(env: &Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("ADMC"))
+            .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
+    }
+
+    fn assert_not_paused(env: &Env) {
+        let admin_controls_addr = Self::admin_controls(env);
+        let admin_controls_client = AdminControlsClient::new(env, &admin_controls_addr);
+        admin_controls_client.assert_not_paused();
+    }
+
     fn require_admin(env: &Env) {
         let admin: Address = env
             .storage()
@@ -256,11 +277,17 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
+        // Deploy admin-controls contract
+        let admin_controls_id = env.register_contract(None, admin_controls::AdminControls);
+        let admin_controls_client = admin_controls::AdminControlsClient::new(&env, &admin_controls_id);
+        let admin = Address::generate(&env);
+        let oracle = Address::generate(&env);
+        admin_controls_client.initialize(&admin, &oracle);
+
         let contract_id = env.register_contract(None, PlanterRegistry);
         let client = PlanterRegistryClient::new(&env, &contract_id);
 
-        let admin = Address::generate(&env);
-        client.initialize(&admin);
+        client.initialize(&admin, &admin_controls_id);
 
         (env, admin, client)
     }
