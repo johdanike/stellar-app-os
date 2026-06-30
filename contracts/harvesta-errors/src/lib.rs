@@ -34,6 +34,7 @@ pub enum HarvestaError {
     BurnAmountMustBePositive = 14,
     SlotAmountMustBePositive = 15,
 
+
     // ── Farmer registry (35–37, 67-68) ───────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
     FarmerNotRegistered = 36,
@@ -43,6 +44,9 @@ pub enum HarvestaError {
     /// The SHA-256 hash supplied by the caller does not match the one stored
     /// on-chain for this farmer's identity document.
     HashMismatch = 68,
+    // ── Farm Plots (150–151) ──────────────────────────────────────────────
+    InvalidCoordinatesCount = 150,
+    PlotAlreadyExists = 151,
 
     // ── Species registry (62–64, 69-70) ──────────────────────────────────────────────
     Co2MustBePositive = 62,
