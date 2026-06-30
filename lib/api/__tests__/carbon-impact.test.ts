@@ -15,7 +15,6 @@ import { cacheClear } from '@/lib/api/tree-registry-cache';
 import { getSponsorImpact, isValidStellarAddress } from '@/lib/api/carbon-impact';
 
 // ── mock heavy stellar imports ────────────────────────────────────────────────
-import { vi } from 'vitest';
 
 vi.mock('@/lib/stellar/tree-asset', () => ({
   CO2_KG_PER_TREE: 48,

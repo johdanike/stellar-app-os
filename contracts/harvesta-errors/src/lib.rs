@@ -1,13 +1,12 @@
 #![no_std]
 
-//! Shared error codes for all Harvesta / FarmCredit contracts.
-//!
-//! Import the crate, then call `panic_with_error!(env, HarvestaError::Variant)`
-//! instead of raw string panics.  Error codes are stable u32 values embedded in
-//! the Stellar XDR so off-chain tooling can parse them without string matching.
-
 use soroban_sdk::contracterror;
 
+/// General-purpose contract errors (45 variants — under the 50-case SDK limit).
+///
+/// NOTE: variants 65 and 66 are intentionally reused across domains
+/// (farmer-registry, species-registry, location-proof).  Each contract only
+/// panics with its own subset, so the codes are unambiguous in context.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -22,37 +21,54 @@ pub enum HarvestaError {
     NoPendingAdmin = 7,
     ContractMustBeTreeTokenAdm = 8,
 
-    // ── Amount / value validation (9–15) ──────────────────────────────────────
-    AmountMustBePositive = 9,
-    TreeCountMustBePositive = 10,
-    VerifiedCountMustBePositive = 11,
-    VerifiedCountExceedsDon = 12,
-    InvalidPayoutAmount = 13,
-    BurnAmountMustBePositive = 14,
-    SlotAmountMustBePositive = 15,
+    // ── Amount / value validation (9–13) ──────────────────────────────────────
+    ValueMustBePositive = 9,
+    VerifiedCountExceedsDonation = 10,
+    InvalidPayoutAmount = 11,
 
-    // ── Escrow state (16–25) ──────────────────────────────────────────────────
-    EscrowAlreadyExists = 16,
-    EscrowNotFound = 17,
-    PlantingAlreadyVerified = 18,
-    PlantingNotVerified = 19,
-    RefundAfterPlanting = 20,
-    SurvivalThresholdOutOfRange = 21,
-    SurvivalRateOutOfRange = 22,
-    SurvivalRateBelowMinimum = 23,
-    SurvivalPeriodNotElapsed = 24,
-    NothingToRelease = 25,
+    // ── Escrow state (12–19) ──────────────────────────────────────────────────
+    EscrowAlreadyExists = 12,
+    EscrowNotFound = 13,
+    PlantingNotVerified = 14,
+    RefundAfterPlanting = 15,
+    SurvivalRateOutOfRange = 16,
+    SurvivalRateBelowMinimum = 17,
+    SurvivalPeriodNotElapsed = 18,
+    NothingToRelease = 19,
 
-    // ── Oracle / tree co-fund (26–34) ─────────────────────────────────────────
-    UnauthorizedOracle = 26,
-    NoOracleReport = 27,
-    BatchEmpty = 28,
-    BatchTooLarge = 29,
-    TreeAlreadyRegistered = 30,
-    TreeNotRegistered = 31,
-    TreeNotOpenForContributions = 32,
-    TreeNotOpenForRelease = 33,
-    NoFundsToRelease = 34,
+    // ── Dispute / arbiter (20–28) ─────────────────────────────────────────────
+    DisputeAlreadyOpen = 20,
+    NoOpenDispute = 21,
+    EscrowAlreadyFinalised = 22,
+    NotArbiter = 23,
+    NotBuyerOrSeller = 24,
+    MilestoneReleaseBlocked = 25,
+    MilestoneAlreadyProcessed = 26,
+    CompletionPercentageOutOfRange = 27,
+    TotalReleasedExceedsMilestone = 28,
+
+    // ── Farmer registry (29–33) ───────────────────────────────────────────────
+    FarmerAlreadyRegistered = 29,
+    FarmerNotRegistered = 30,
+    InvalidRegion = 31,
+    NotValidator = 32,
+    HashMismatch = 33,
+
+    // ── Species registry (34–37) ──────────────────────────────────────────────
+    SpeciesNotFound = 34,
+    InvasiveSpecies = 35,
+    HighWaterUse = 36,
+
+    // ── Carbon marketplace (37–45) ────────────────────────────────────────────
+    ListingNotFound = 37,
+    ListingNotActive = 38,
+    InsufficientLiquidity = 39,
+    SelfTrade = 40,
+    InvalidPriceRange = 41,
+    AuctionNotFound = 42,
+    AuctionNotActive = 43,
+    AuctionExpired = 44,
+    BidBelowReservePrice = 45,
 
     // ── Farmer registry (35–37) ───────────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
@@ -110,34 +126,64 @@ pub enum HarvestaError {
     InvasiveSpecies = 69,
     HighWaterUse = 70,
 
-    // ── Donation escrow (71–79) ───────────────────────────────────────────────
-    AlreadyProcessed = 71,
-    NotDonor = 72,
-    DonationAlreadyCancelled = 73,
-    DonationCancelled = 74,
-    IntervalNotElapsed = 75,
-    ProjectNotRegistered = 76,
-    AmountPerIntervalMustBePos = 77,
-    IntervalSecondsMustBePos = 78,
-    RecurringDonationNotFound = 79,
+    // ── Arithmetic overflows (48–49) ──────────────────────────────────────────
+    TreeTokenMintOverflow = 48,
+    TokenUnitOverflow = 49,
 
-    // ── Donation escrow auto-refund (#634) (82–83) ────────────────────────────
-    MilestoneDeadlineNotPassed = 82,
-    LocationAlreadyVerified = 83,
-
+    // ── Multi-party consensus (50–52) ─────────────────────────────────────────
+    NotAVerifier = 50,
+    AlreadyVoted = 51,
+    VerifierAlreadyRegistered = 52,
     // ── Tree registry (88–90) ─────────────────────────────────────────────────
     NotFound = 88,
     InvalidStatus = 89,
     NotAuthorized = 90,
 
-    // ── Verifier staking (91–95) ──────────────────────────────────────────────
-    MinStakeMustBePositive = 91,
-    VerifierAlreadyStaked = 92,
-    VerifierNotStaked = 93,
-    SlashExceedsStake = 94,
-    InsufficientStake = 95,
+    // ── Arithmetic overflows (86–87) ──────────────────────────────────────────
+    TreeTokenMintOverflow = 86,
+    TokenUnitOverflow = 87,
+}
 
-    // ── Carbon marketplace (100–113) ──────────────────────────────────────────
+/// Multi-signature governance errors — used by admin-controls only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum GovernanceError {
+    MultisigNotInitialized = 82,
+    NotASigner = 83,
+    ProposalNotFound = 84,
+    ProposalAlreadyExecuted = 85,
+    AlreadyApproved = 86,
+    ThresholdTooHigh = 87,
+    ThresholdMustBePositive = 88,
+    SignerAlreadyExists = 89,
+    SignerNotFound = 90,
+    MinimumOneSignerRequired = 91,
+}
+
+/// Donation escrow errors — used by donation-escrow only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum DonationEscrowError {
+    UnsupportedToken = 71,
+    EscrowNotFound = 72,
+    AlreadyProcessed = 73,
+    DonationCancelled = 74,
+    IntervalNotElapsed = 75,
+    RecurringDonationNotFound = 76,
+    ProjectNotRegistered = 77,
+    NotDonor = 78,
+    DonationAlreadyCancelled = 79,
+    AmountPerIntervalMustBePos = 80,
+    IntervalSecondsMustBePos = 81,
+}
+
+/// Carbon marketplace / auction errors — used by carbon-marketplace only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum MarketplaceError {
     ListingAmountMustBePositive = 100,
     PriceMustBePositive = 101,
     ListingNotFound = 102,
@@ -152,18 +198,4 @@ pub enum HarvestaError {
     AuctionNotActive = 111,
     AuctionExpired = 112,
     BidBelowReservePrice = 113,
-
-    // ── ZK location verifier (120–123) ─────────────────────────────────────────
-    CommitmentAlreadySubmitted = 120,
-    CommitmentNotFound = 121,
-    CommitmentNotPending = 122,
-    InvalidProof = 123,
-
-    // ── Farm Plots (150–151) ──────────────────────────────────────────────────
-    InvalidCoordinatesCount = 150,
-    PlotAlreadyExists = 151,
-
-    // ── Arithmetic overflows (86–87) ──────────────────────────────────────────
-    TreeTokenMintOverflow = 86,
-    TokenUnitOverflow = 87,
 }
