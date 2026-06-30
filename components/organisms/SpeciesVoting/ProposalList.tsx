@@ -127,10 +127,7 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
 
   const config = configs[status];
   return (
-    <Badge
-      variant="outline"
-      className={cn('gap-1 text-xs font-medium', config.className)}
-    >
+    <Badge variant="outline" className={cn('gap-1 text-xs font-medium', config.className)}>
       {config.icon}
       {config.label}
     </Badge>
@@ -147,13 +144,7 @@ interface ProposalCardProps {
   onExecute: (proposalId: number) => Promise<void>;
 }
 
-function ProposalCard({
-  proposal,
-  voteState,
-  hasVoted,
-  onVote,
-  onExecute,
-}: ProposalCardProps) {
+function ProposalCard({ proposal, voteState, hasVoted, onVote, onExecute }: ProposalCardProps) {
   const votePercent = calculateVotePercentage(proposal.votes_for, proposal.votes_against);
   const totalVotes = proposal.votes_for + proposal.votes_against;
   const isSigning = voteState.status === 'signing';
@@ -191,12 +182,8 @@ function ProposalCard({
             </span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] text-white/40 uppercase tracking-wider">
-              Maturity
-            </span>
-            <span className="text-sm font-semibold text-white">
-              {proposal.maturity_years} yrs
-            </span>
+            <span className="text-[11px] text-white/40 uppercase tracking-wider">Maturity</span>
+            <span className="text-sm font-semibold text-white">{proposal.maturity_years} yrs</span>
           </div>
         </div>
 
@@ -247,9 +234,7 @@ function ProposalCard({
         {voteState.status === 'failed' && (
           <Alert className="border-red-500/30 bg-red-500/10 py-2" role="alert">
             <AlertCircle className="h-4 w-4 text-red-400" aria-hidden="true" />
-            <AlertDescription className="text-red-300 text-xs">
-              {voteState.error}
-            </AlertDescription>
+            <AlertDescription className="text-red-300 text-xs">{voteState.error}</AlertDescription>
           </Alert>
         )}
       </CardContent>
@@ -266,9 +251,15 @@ function ProposalCard({
               className="flex-1 bg-green-600 hover:bg-green-500 text-white border-0"
             >
               {isSigning && (voteState as { direction: boolean }).direction === true ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />Signing…</>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                  Signing…
+                </>
               ) : (
-                <><ThumbsUp className="h-4 w-4 mr-2" aria-hidden="true" />Vote For</>
+                <>
+                  <ThumbsUp className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Vote For
+                </>
               )}
             </Button>
             <Button
@@ -279,9 +270,15 @@ function ProposalCard({
               className="flex-1 border-red-500/40 text-red-400 hover:bg-red-500/10"
             >
               {isSigning && (voteState as { direction: boolean }).direction === false ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />Signing…</>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                  Signing…
+                </>
               ) : (
-                <><ThumbsDown className="h-4 w-4 mr-2" aria-hidden="true" />Vote Against</>
+                <>
+                  <ThumbsDown className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Vote Against
+                </>
               )}
             </Button>
           </div>
@@ -294,13 +291,12 @@ function ProposalCard({
         )}
 
         {proposal.status === ProposalStatus.Passed && (
-          <Button
-            onClick={() => onExecute(proposal.id)}
-            disabled={isSigning}
-            className="w-full"
-          >
+          <Button onClick={() => onExecute(proposal.id)} disabled={isSigning} className="w-full">
             {isSigning ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />Signing…</>
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                Signing…
+              </>
             ) : (
               'Execute Proposal'
             )}
@@ -331,8 +327,7 @@ export function ProposalList() {
   const setVoteState = (id: number, state: VoteState) =>
     setVoteStates((prev) => ({ ...prev, [id]: state }));
 
-  const getVoteState = (id: number): VoteState =>
-    voteStates[id] ?? { status: 'idle' };
+  const getVoteState = (id: number): VoteState => voteStates[id] ?? { status: 'idle' };
 
   // ── Vote handler ─────────────────────────────────────────────────────────
 
@@ -366,12 +361,11 @@ export function ProposalList() {
         setVoteState(proposalId, { status: 'confirmed', direction: voteFor });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to submit vote';
-        const isRejection = msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel');
+        const isRejection =
+          msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel');
         setVoteState(proposalId, {
           status: 'failed',
-          error: isRejection
-            ? 'Transaction cancelled. Your vote was not submitted.'
-            : msg,
+          error: isRejection ? 'Transaction cancelled. Your vote was not submitted.' : msg,
         });
       }
     },
@@ -428,7 +422,8 @@ export function ProposalList() {
     <Alert className="border-amber-500/30 bg-amber-500/10 mb-4">
       <AlertCircle className="h-4 w-4 text-amber-400" aria-hidden="true" />
       <AlertDescription className="text-amber-300 text-sm">
-        Connect your wallet to cast votes. Your voting power is proportional to your TREE token holdings.
+        Connect your wallet to cast votes. Your voting power is proportional to your TREE token
+        holdings.
       </AlertDescription>
     </Alert>
   );

@@ -2,6 +2,11 @@
 
 use soroban_sdk::contracterror;
 
+/// General-purpose contract errors (45 variants — under the 50-case SDK limit).
+///
+/// NOTE: variants 65 and 66 are intentionally reused across domains
+/// (farmer-registry, species-registry, location-proof).  Each contract only
+/// panics with its own subset, so the codes are unambiguous in context.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -103,4 +108,60 @@ pub enum HarvestaError {
     // ── Arithmetic overflows (86–87) ──────────────────────────────────────────
     TreeTokenMintOverflow = 86,
     TokenUnitOverflow = 87,
+}
+
+/// Multi-signature governance errors — used by admin-controls only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum GovernanceError {
+    MultisigNotInitialized = 82,
+    NotASigner = 83,
+    ProposalNotFound = 84,
+    ProposalAlreadyExecuted = 85,
+    AlreadyApproved = 86,
+    ThresholdTooHigh = 87,
+    ThresholdMustBePositive = 88,
+    SignerAlreadyExists = 89,
+    SignerNotFound = 90,
+    MinimumOneSignerRequired = 91,
+}
+
+/// Donation escrow errors — used by donation-escrow only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum DonationEscrowError {
+    UnsupportedToken = 71,
+    EscrowNotFound = 72,
+    AlreadyProcessed = 73,
+    DonationCancelled = 74,
+    IntervalNotElapsed = 75,
+    RecurringDonationNotFound = 76,
+    ProjectNotRegistered = 77,
+    NotDonor = 78,
+    DonationAlreadyCancelled = 79,
+    AmountPerIntervalMustBePos = 80,
+    IntervalSecondsMustBePos = 81,
+}
+
+/// Carbon marketplace / auction errors — used by carbon-marketplace only.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum MarketplaceError {
+    ListingAmountMustBePositive = 100,
+    PriceMustBePositive = 101,
+    ListingNotFound = 102,
+    ListingNotActive = 103,
+    InsufficientLiquidity = 104,
+    BuyAmountMustBePositive = 105,
+    SelfTrade = 106,
+    InvalidPriceRange = 107,
+    InvalidDecayRate = 108,
+    InvalidDuration = 109,
+    AuctionNotFound = 110,
+    AuctionNotActive = 111,
+    AuctionExpired = 112,
+    BidBelowReservePrice = 113,
 }

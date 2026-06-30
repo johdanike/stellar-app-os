@@ -151,19 +151,19 @@ impl CarbonMarketplace {
         admin.require_auth();
 
         if starting_price <= 0 {
-            panic_with_error!(&env, HarvestaError::PriceMustBePositive);
+            panic_with_error!(&env, MarketplaceError::PriceMustBePositive);
         }
         if reserve_price <= 0 {
-            panic_with_error!(&env, HarvestaError::PriceMustBePositive);
+            panic_with_error!(&env, MarketplaceError::PriceMustBePositive);
         }
         if reserve_price >= starting_price {
-            panic_with_error!(&env, HarvestaError::InvalidPriceRange);
+            panic_with_error!(&env, MarketplaceError::InvalidPriceRange);
         }
         if decay_rate == 0 || decay_rate > 10000 {
-            panic_with_error!(&env, HarvestaError::InvalidDecayRate);
+            panic_with_error!(&env, MarketplaceError::InvalidDecayRate);
         }
         if duration == 0 {
-            panic_with_error!(&env, HarvestaError::InvalidDuration);
+            panic_with_error!(&env, MarketplaceError::InvalidDuration);
         }
 
         env.storage()
@@ -186,10 +186,10 @@ impl CarbonMarketplace {
         seller.require_auth();
 
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::ListingAmountMustBePositive);
+            panic_with_error!(&env, MarketplaceError::ListingAmountMustBePositive);
         }
         if price_per_token <= 0 {
-            panic_with_error!(&env, HarvestaError::PriceMustBePositive);
+            panic_with_error!(&env, MarketplaceError::PriceMustBePositive);
         }
 
         let (_, tree_token) = Self::config(&env);
@@ -242,25 +242,25 @@ impl CarbonMarketplace {
         buyer.require_auth();
 
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::BuyAmountMustBePositive);
+            panic_with_error!(&env, MarketplaceError::BuyAmountMustBePositive);
         }
 
         let mut listing: Listing = env
             .storage()
             .persistent()
             .get(&DataKey::Listing(listing_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ListingNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, MarketplaceError::ListingNotFound));
 
         if listing.status != ListingStatus::Active {
-            panic_with_error!(&env, HarvestaError::ListingNotActive);
+            panic_with_error!(&env, MarketplaceError::ListingNotActive);
         }
 
         if buyer == listing.seller {
-            panic_with_error!(&env, HarvestaError::SelfTrade);
+            panic_with_error!(&env, MarketplaceError::SelfTrade);
         }
 
         if amount > listing.remaining {
-            panic_with_error!(&env, HarvestaError::InsufficientLiquidity);
+            panic_with_error!(&env, MarketplaceError::InsufficientLiquidity);
         }
 
         let payment = amount
@@ -303,10 +303,10 @@ impl CarbonMarketplace {
             .storage()
             .persistent()
             .get(&DataKey::Listing(listing_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ListingNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, MarketplaceError::ListingNotFound));
 
         if listing.status != ListingStatus::Active {
-            panic_with_error!(&env, HarvestaError::ListingNotActive);
+            panic_with_error!(&env, MarketplaceError::ListingNotActive);
         }
 
         if listing.remaining > 0 {
@@ -336,10 +336,10 @@ impl CarbonMarketplace {
             .storage()
             .persistent()
             .get(&DataKey::Listing(listing_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ListingNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, MarketplaceError::ListingNotFound));
 
         if listing.status != ListingStatus::Active {
-            panic_with_error!(&env, HarvestaError::ListingNotActive);
+            panic_with_error!(&env, MarketplaceError::ListingNotActive);
         }
 
         if listing.remaining > 0 {
@@ -392,7 +392,7 @@ impl CarbonMarketplace {
         seller.require_auth();
 
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::ListingAmountMustBePositive);
+            panic_with_error!(&env, MarketplaceError::ListingAmountMustBePositive);
         }
 
         let (starting_price, reserve_price, decay_rate, duration) = Self::auction_config(&env);
@@ -452,38 +452,38 @@ impl CarbonMarketplace {
         buyer.require_auth();
 
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::BuyAmountMustBePositive);
+            panic_with_error!(&env, MarketplaceError::BuyAmountMustBePositive);
         }
 
         let mut auction: DutchAuction = env
             .storage()
             .persistent()
             .get(&DataKey::Auction(auction_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::AuctionNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, MarketplaceError::AuctionNotFound));
 
         if auction.status != AuctionStatus::Active {
-            panic_with_error!(&env, HarvestaError::AuctionNotActive);
+            panic_with_error!(&env, MarketplaceError::AuctionNotActive);
         }
 
         if buyer == auction.seller {
-            panic_with_error!(&env, HarvestaError::SelfTrade);
+            panic_with_error!(&env, MarketplaceError::SelfTrade);
         }
 
         if amount > auction.remaining {
-            panic_with_error!(&env, HarvestaError::InsufficientLiquidity);
+            panic_with_error!(&env, MarketplaceError::InsufficientLiquidity);
         }
 
         let current_time = env.ledger().timestamp();
         let elapsed = current_time.saturating_sub(auction.start_time);
 
         if elapsed > auction.duration {
-            panic_with_error!(&env, HarvestaError::AuctionExpired);
+            panic_with_error!(&env, MarketplaceError::AuctionExpired);
         }
 
         let current_price = Self::calculate_current_price(&auction, current_time);
 
         if current_price < auction.reserve_price {
-            panic_with_error!(&env, HarvestaError::BidBelowReservePrice);
+            panic_with_error!(&env, MarketplaceError::BidBelowReservePrice);
         }
 
         let payment = amount
@@ -526,10 +526,10 @@ impl CarbonMarketplace {
             .storage()
             .persistent()
             .get(&DataKey::Auction(auction_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::AuctionNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, MarketplaceError::AuctionNotFound));
 
         if auction.status != AuctionStatus::Active {
-            panic_with_error!(&env, HarvestaError::AuctionNotActive);
+            panic_with_error!(&env, MarketplaceError::AuctionNotActive);
         }
 
         if auction.remaining > 0 {
@@ -562,7 +562,7 @@ impl CarbonMarketplace {
             .storage()
             .persistent()
             .get(&DataKey::Auction(auction_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::AuctionNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, MarketplaceError::AuctionNotFound));
 
         Self::calculate_current_price(&auction, env.ledger().timestamp())
     }
