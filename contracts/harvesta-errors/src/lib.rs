@@ -81,6 +81,9 @@ pub enum HarvestaError {
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
 
+    // ── Dispute / arbiter (#469) ──────────────────────────────────────────────
+    NotArbiter = 92,
+
     // ── Tree lifecycle state machine (#462) ───────────────────────────────────
     InvalidTreeStatusTransition = 90,
     PlantingTimeoutNotReached = 91,

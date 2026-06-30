@@ -505,6 +505,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "expiry_deadline"
+                      },
+                      "val": {
+                        "u64": 1209600
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "farmer"
                       },
                       "val": {

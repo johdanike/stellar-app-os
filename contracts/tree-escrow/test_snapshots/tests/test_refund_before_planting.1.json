@@ -384,6 +384,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "expiry_deadline"
+                      },
+                      "val": {
+                        "u64": 1209600
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "farmer"
                       },
                       "val": {
@@ -2233,6 +2241,14 @@
                   },
                   "val": {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "expiry_deadline"
+                  },
+                  "val": {
+                    "u64": 1209600
                   }
                 },
                 {

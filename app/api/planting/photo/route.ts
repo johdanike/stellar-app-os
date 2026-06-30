@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import exifr from 'exifr';
 import { getDistance } from '@/lib/geo/distance';
 import { uploadImageToS3 } from '@/lib/aws/s3';
+import { invalidateMapCoordinateCache } from '@/lib/cache/map-cache';
 import { encryptGpsCoordinates } from '@/lib/zk/locationProof';
 import { sendPhotoUploadedEmail } from '@/lib/email/sendgrid';
 import { getPool } from '@/lib/db/client';
@@ -96,6 +97,8 @@ export async function POST(request: Request) {
         [geohash, region]
       )
       .catch((err) => console.error('[planting/photo] map upsert error:', err));
+
+    await invalidateMapCoordinateCache();
 
     // Notify sponsor if contact info provided
     if (sponsorEmail && sponsorName && treeId) {
