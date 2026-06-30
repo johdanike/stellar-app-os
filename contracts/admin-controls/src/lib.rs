@@ -72,19 +72,10 @@ pub struct Proposal {
 
 // ── Existing types ────────────────────────────────────────────────────────────
 
-/// Option<Address> wrapper — Soroban #[contracttype] does not support Option<Address> directly.
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub enum OptAddress {
-    None,
-    Some(Address),
-}
-
-impl OptAddress {
-    pub fn is_none(&self) -> bool {
-        matches!(self, OptAddress::None)
-    }
-}
+/// `Option<Address>` wrapper, imported from the shared crate (#502).
+/// Re-exported as `OptAddress` at this path so existing callers / tests
+/// continue to compile without modification.
+pub use shared::OptAddress;
 
 /// Snapshot of the current admin configuration.
 #[contracttype]
