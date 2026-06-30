@@ -4,6 +4,7 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token,
     Address, Env, IntoVal,
 };
+use admin_controls::AdminControlsClient;
 
 /// 90 days in seconds
 const REFUND_WINDOW: u64 = 90 * 24 * 60 * 60;
@@ -45,14 +46,17 @@ pub struct Escrow;
 
 #[contractimpl]
 impl Escrow {
-    /// Initialize with a verifier address (the only party that can call release).
-    pub fn initialize(env: Env, verifier: Address) {
+    /// Initialize with a verifier address and admin-controls address.
+    pub fn initialize(env: Env, verifier: Address, admin_controls: Address) {
         if env.storage().instance().has(&symbol_short!("VERIFIER")) {
             panic_with_error!(&env, EscrowError::AlreadyInitialized);
         }
         env.storage()
             .instance()
             .set(&symbol_short!("VERIFIER"), &verifier);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("ADMC"), &admin_controls);
     }
 
     /// Sponsor deposits funds for a specific tree_id into escrow.
@@ -64,6 +68,7 @@ impl Escrow {
         token: Address,
         amount: i128,
     ) {
+        Self::assert_not_paused(&env);
         sponsor.require_auth();
 
         if amount <= 0 {
@@ -101,6 +106,7 @@ impl Escrow {
 
     /// Release funds to the planter. Only callable by the registered verifier.
     pub fn release(env: Env, tree_id: u64) {
+        Self::assert_not_paused(&env);
         Self::require_verifier(&env);
 
         let key = Self::escrow_key(&env, tree_id);
@@ -132,6 +138,7 @@ impl Escrow {
     /// Refund funds to sponsor if 90 days have elapsed without a release.
     /// Only the original sponsor may call this.
     pub fn refund(env: Env, tree_id: u64) {
+        Self::assert_not_paused(&env);
         let key = Self::escrow_key(&env, tree_id);
         let mut record: EscrowRecord = env
             .storage()
@@ -178,6 +185,19 @@ impl Escrow {
         (symbol_short!("ESC"), tree_id).into_val(env)
     }
 
+    fn admin_controls(env: &Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("ADMC"))
+            .unwrap_or_else(|| panic_with_error!(env, EscrowError::NotInitialized))
+    }
+
+    fn assert_not_paused(env: &Env) {
+        let admin_controls_addr = Self::admin_controls(env);
+        let admin_controls_client = AdminControlsClient::new(env, &admin_controls_addr);
+        admin_controls_client.assert_not_paused();
+    }
+
     fn require_verifier(env: &Env) {
         let verifier: Address = env
             .storage()
@@ -202,6 +222,13 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
+        // Deploy admin-controls contract
+        let admin_controls_id = env.register_contract(None, admin_controls::AdminControls);
+        let admin_controls_client = admin_controls::AdminControlsClient::new(&env, &admin_controls_id);
+        let admin = Address::generate(&env);
+        let oracle = Address::generate(&env);
+        admin_controls_client.initialize(&admin, &oracle);
+
         let contract_id = env.register_contract(None, Escrow);
         let client = EscrowClient::new(&env, &contract_id);
 
@@ -213,7 +240,7 @@ mod tests {
         let token = env.register_stellar_asset_contract(token_admin.clone());
         token::StellarAssetClient::new(&env, &token).mint(&sponsor, &1_000_000);
 
-        client.initialize(&verifier);
+        client.initialize(&verifier, &admin_controls_id);
 
         (env, verifier, sponsor, planter, token, client)
     }

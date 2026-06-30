@@ -58,8 +58,8 @@ const SIX_MONTHS_SECS: u64 = 60 * 60 * 24 * 7 * 26;
 /// Window in which a sponsor may challenge a verification outcome (#469)
 const DISPUTE_WINDOW_SECS: u64 = 60 * 60 * 24 * 7;
 
-/// 1 year in seconds (365 days)
-const ONE_YEAR_SECS: u64 = 60 * 60 * 24 * 365;
+/// 14 days in seconds — unaccepted jobs expire after this window (Closes #517)
+const JOB_EXPIRY_SECS: u64 = 60 * 60 * 24 * 14;
 
 /// Maximum slots per batch deposit (Stellar operation limit safety margin)
 const MAX_BATCH_SIZE: u32 = 50;
@@ -83,6 +83,8 @@ pub enum EscrowStatus {
     Survived,
     Completed,
     Refunded,
+    /// Sponsor refunded because no planter accepted within 14 days (Closes #517)
+    JobExpired,
 }
 
 #[contracttype]
@@ -105,6 +107,8 @@ pub struct EscrowRecord {
     pub survival_proof: BytesN<32>,
     pub survival_rate_percent: u32,
     pub year_proof: BytesN<32>,
+    /// Ledger timestamp after which the job can be expired if still unaccepted (Closes #517)
+    pub expiry_deadline: u64,
 }
 
 /// A single slot in a batch deposit: one farmer address and the amount for that tree.
@@ -232,6 +236,15 @@ pub struct CorpBatchRecord {
     pub created_at: u64,
 }
 
+/// Registered arbiter record — a trusted third party that can override
+/// verification results and resolve locked disputes (#649).
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct ArbiterRecord {
+    pub arbiter: Address,
+    pub registered_at: u64,
+}
+
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
 #[contracttype]
@@ -250,11 +263,8 @@ enum DataKey {
     /// Sponsor dispute on a verification outcome (#469)
     Dispute(u64),
     DaoMembers,
-    SponsorRating(Address, Address),
-    PlanterReputation(Address),
-    PayoutHistory(Address),
-    CorpBatch(u64),
-    CorpBatchSeq,
+    /// Registered arbiter address (#649)
+    Arbiter,
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -296,7 +306,7 @@ impl TreeEscrow {
         if token::StellarAssetClient::new(&env, &tree_token).admin()
             != env.current_contract_address()
         {
-            panic_with_error!(&env, HarvestaError::ContractMustBeTreeTokenAdmin);
+            panic_with_error!(&env, HarvestaError::ContractMustBeTreeTokenAdm);
         }
 
         let tree_decimals = token::Client::new(&env, &tree_token).decimals();
@@ -417,6 +427,7 @@ impl TreeEscrow {
                 survival_proof: empty_hash.clone(),
                 survival_rate_percent: 0,
                 year_proof: empty_hash,
+                expiry_deadline: env.ledger().timestamp() + JOB_EXPIRY_SECS,
             },
         );
 
@@ -481,7 +492,8 @@ impl TreeEscrow {
                     planting_proof: zero_hash.clone(),
                     survival_proof: zero_hash.clone(),
                     survival_rate_percent: 0,
-                    year_proof: zero_hash.clone(),
+                    year_proof: empty_hash,
+                    expiry_deadline: env.ledger().timestamp() + JOB_EXPIRY_SECS,
                 },
             );
             env.events()
@@ -734,6 +746,42 @@ impl TreeEscrow {
 
         env.events()
             .publish((symbol_short!("refund"), farmer), rec.total_amount);
+    }
+
+    /// Expires a job that has never been accepted by a planter.
+    ///
+    /// Any caller may trigger expiry once `expiry_deadline` has passed and the
+    /// escrow is still in `Funded` status (i.e. no planter has started work).
+    /// The full deposit is returned to the sponsor and a `JobExpired` event is
+    /// emitted. Closes #517.
+    pub fn expire_job(env: Env, farmer: Address) {
+        let key = DataKey::Escrow(farmer.clone());
+        let mut rec: EscrowRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .expect("no escrow for farmer");
+
+        if rec.status != EscrowStatus::Funded {
+            panic!("job cannot be expired: planting already started or job already closed");
+        }
+
+        let now = env.ledger().timestamp();
+        if now < rec.expiry_deadline {
+            panic!("expiry deadline has not yet passed");
+        }
+
+        token::Client::new(&env, &rec.token).transfer(
+            &env.current_contract_address(),
+            &rec.donor,
+            &rec.total_amount,
+        );
+
+        rec.status = EscrowStatus::JobExpired;
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("jobexpir"), farmer), rec.total_amount);
     }
 
     pub fn get_record(env: Env, farmer: Address) -> Option<EscrowRecord> {
@@ -1206,6 +1254,109 @@ impl TreeEscrow {
         Self::dispute_is_open(&env, tree_id)
     }
 
+    // ── Arbiter dispute resolution (#649) ─────────────────────────────────────
+
+    /// Admin registers a trusted third-party arbiter.
+    /// Only one arbiter is active at a time; calling again replaces the previous one.
+    pub fn register_arbiter(env: Env, arbiter: Address) {
+        let (admin, _tree_token, _decimals) = Self::admin_tree(&env);
+        admin.require_auth();
+
+        let record = ArbiterRecord {
+            arbiter: arbiter.clone(),
+            registered_at: env.ledger().timestamp(),
+        };
+        env.storage().instance().set(&DataKey::Arbiter, &record);
+
+        env.events()
+            .publish((symbol_short!("arbReg"), arbiter), ());
+    }
+
+    /// Returns the currently registered arbiter record, if any.
+    pub fn get_arbiter(env: Env) -> Option<ArbiterRecord> {
+        env.storage().instance().get(&DataKey::Arbiter)
+    }
+
+    /// Arbiter overrides the verification result for a single-donor escrow,
+    /// moving a locked/Planted escrow back to Funded so a refund can proceed,
+    /// or forcing it to Completed so the remaining balance is released.
+    ///
+    /// * `tree_released` — `true` to release remaining funds to the farmer
+    ///   (treats as completed); `false` to revert to Funded so the donor can
+    ///   reclaim via `refund`.
+    pub fn arbiter_override(env: Env, arbiter: Address, farmer: Address, tree_released: bool) {
+        arbiter.require_auth();
+        Self::assert_is_arbiter(&env, &arbiter);
+
+        let key = DataKey::Escrow(farmer.clone());
+        let mut rec: EscrowRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
+
+        if rec.status == EscrowStatus::Completed || rec.status == EscrowStatus::Refunded {
+            panic!("escrow already finalised");
+        }
+
+        if tree_released {
+            // Release remaining balance to farmer
+            let remaining = rec.total_amount.checked_sub(rec.released).expect("underflow");
+            if remaining > 0 {
+                token::Client::new(&env, &rec.token).transfer(
+                    &env.current_contract_address(),
+                    &rec.farmer,
+                    &remaining,
+                );
+                rec.released = rec.total_amount;
+            }
+            rec.status = EscrowStatus::Completed;
+        } else {
+            // Revert to Funded so donor may call refund
+            rec.status = EscrowStatus::Funded;
+        }
+
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("arbOvrd"), farmer), tree_released);
+    }
+
+    /// Arbiter resolves a co-funded tree dispute, bypassing the DAO vote
+    /// requirement. Sets the dispute outcome directly and unblocks or
+    /// permanently locks fund release for `tree_id`.
+    ///
+    /// * `uphold` — `true` to uphold the verification (release can proceed);
+    ///   `false` to overturn it (funds remain locked for contributor refund).
+    pub fn arbiter_resolve(env: Env, arbiter: Address, tree_id: u64, uphold: bool) {
+        arbiter.require_auth();
+        Self::assert_is_arbiter(&env, &arbiter);
+
+        let dispute_key = DataKey::Dispute(tree_id);
+        let mut dispute: DisputeRecord = env
+            .storage()
+            .persistent()
+            .get(&dispute_key)
+            .expect("no dispute for tree");
+
+        if dispute.resolved {
+            panic!("dispute already resolved");
+        }
+
+        let outcome = if uphold {
+            DisputeOutcome::VerificationUpheld
+        } else {
+            DisputeOutcome::VerificationOverturned
+        };
+
+        dispute.resolved = true;
+        dispute.outcome = outcome.clone();
+        env.storage().persistent().set(&dispute_key, &dispute);
+
+        env.events()
+            .publish((symbol_short!("arbRes"), tree_id), outcome);
+    }
+
     // ── Whitelist management ──────────────────────────────────────────────────
 
     /// Add `addr` to the contract whitelist. Restricted to admin.
@@ -1278,6 +1429,17 @@ impl TreeEscrow {
             }
         }
         false
+    }
+
+    fn assert_is_arbiter(env: &Env, address: &Address) {
+        let record: ArbiterRecord = env
+            .storage()
+            .instance()
+            .get(&DataKey::Arbiter)
+            .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotArbiter));
+        if record.arbiter != *address {
+            panic_with_error!(env, HarvestaError::NotArbiter);
+        }
     }
 
     fn is_paused(env: &Env) -> bool {
@@ -1746,6 +1908,61 @@ mod tests {
         ctx.client
             .verify_progress(&ctx.farmer, &proof(&ctx.env, 1), &42);
         ctx.client.refund(&ctx.farmer);
+    }
+
+    // ── expire_job (#517) ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_expire_job_happy_path() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+
+        // Advance time past the 14-day deadline.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += JOB_EXPIRY_SECS + 1);
+
+        let pre_balance = balance(&ctx.env, &ctx.token, &ctx.donor);
+        ctx.client.expire_job(&ctx.farmer);
+
+        // Sponsor refunded in full.
+        assert_eq!(
+            balance(&ctx.env, &ctx.token, &ctx.donor) - pre_balance,
+            10_000
+        );
+        assert_eq!(
+            ctx.client.get_record(&ctx.farmer).unwrap().status,
+            EscrowStatus::JobExpired
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "expiry deadline has not yet passed")]
+    fn test_expire_job_too_early_rejected() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+
+        // Only 1 day has passed — well before the 14-day deadline.
+        ctx.env.ledger().with_mut(|l| l.timestamp += 86_400);
+        ctx.client.expire_job(&ctx.farmer);
+    }
+
+    #[test]
+    #[should_panic(expected = "job cannot be expired: planting already started or job already closed")]
+    fn test_expire_job_after_planting_rejected() {
+        let ctx = setup();
+        ctx.client
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+        ctx.client
+            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &5);
+
+        // Even if time has elapsed, a planted job cannot be expired.
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += JOB_EXPIRY_SECS + 1);
+        ctx.client.expire_job(&ctx.farmer);
     }
 
     #[test]

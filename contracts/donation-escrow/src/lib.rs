@@ -4,12 +4,15 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Env,
     IntoVal, Vec,
 };
-use harvesta_errors::HarvestaError;
+use harvesta_errors::{DonationEscrowError, HarvestaError};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /// Maximum trees per donation
 const MAX_TREES: u32 = 50;
+
+/// Default window for planters to submit location verification proofs (90 days).
+const DEFAULT_MILESTONE_DEADLINE_SECS: u64 = 90 * 24 * 60 * 60;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +34,10 @@ pub struct DonationRecord {
     pub timestamp: u64,
     pub batch_id: u32,
     pub status: DonationStatus,
+    /// Ledger timestamp after which donors may claim a refund if unverified.
+    pub milestone_deadline: u64,
+    /// Set when admin confirms location verification proofs were submitted.
+    pub location_verified: bool,
 }
 
 #[contracttype]
@@ -53,11 +60,25 @@ pub struct DonationEscrow;
 
 #[contractimpl]
 impl DonationEscrow {
-    /// Initialize contract
-    pub fn initialize(env: Env, admin: Address, xlm_token: Address, usdc_token: Address) {
+    /// Initialize contract.
+    /// `milestone_deadline_secs` is the per-donation window for location verification;
+    /// pass `0` to use the default (90 days).
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        xlm_token: Address,
+        usdc_token: Address,
+        milestone_deadline_secs: u64,
+    ) {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
             panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
+
+        let deadline_secs = if milestone_deadline_secs == 0 {
+            DEFAULT_MILESTONE_DEADLINE_SECS
+        } else {
+            milestone_deadline_secs
+        };
 
         env.storage()
             .instance()
@@ -65,6 +86,9 @@ impl DonationEscrow {
         env.storage()
             .instance()
             .set(&symbol_short!("TOKENS"), &(xlm_token, usdc_token));
+        env.storage()
+            .instance()
+            .set(&symbol_short!("MSTONE"), &deadline_secs);
 
         // (current_batch, seq)
         env.storage()
@@ -96,7 +120,7 @@ impl DonationEscrow {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
 
         if token != xlm && token != usdc {
-            panic_with_error!(&env, HarvestaError::UnsupportedToken);
+            panic_with_error!(&env, DonationEscrowError::UnsupportedToken);
         }
         contract_utils::assert_whitelisted(&env, &token);
 
@@ -115,14 +139,22 @@ impl DonationEscrow {
         // transfer funds
         token::Client::new(&env, &token).transfer(&donor, &env.current_contract_address(), &amount);
 
+        let now = env.ledger().timestamp();
+        let milestone_window = Self::read_milestone_deadline_secs(&env);
+        let milestone_deadline = now
+            .checked_add(milestone_window)
+            .expect("milestone deadline overflow");
+
         let rec = DonationRecord {
             donor: donor.clone(),
             token: token.clone(),
             amount,
             tree_count,
-            timestamp: env.ledger().timestamp(),
+            timestamp: now,
             batch_id,
             status: DonationStatus::Pending,
+            milestone_deadline,
+            location_verified: false,
         };
 
         env.storage()
@@ -172,10 +204,10 @@ impl DonationEscrow {
                 .storage()
                 .persistent()
                 .get(&key)
-                .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
+                .unwrap_or_else(|| panic_with_error!(&env, DonationEscrowError::EscrowNotFound));
 
             if rec.status != DonationStatus::Pending {
-                panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+                panic_with_error!(&env, DonationEscrowError::AlreadyProcessed);
             }
 
             // CEI: update state before external transfer to prevent reentrancy.
@@ -193,7 +225,69 @@ impl DonationEscrow {
         }
     }
 
-    /// Refund donation
+    /// Admin confirms location verification proofs were submitted for a donation.
+    pub fn verify_location(env: Env, seq: u64) {
+        Self::require_admin(&env);
+
+        let key = Self::donation_key(&env, seq);
+        let mut rec: DonationRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
+
+        if rec.status != DonationStatus::Pending {
+            panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+        }
+        if rec.location_verified {
+            panic_with_error!(&env, HarvestaError::LocationAlreadyVerified);
+        }
+
+        rec.location_verified = true;
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("loc_ver"), seq), rec.milestone_deadline);
+    }
+
+    /// Donor claims a refund when the milestone deadline has passed without verification.
+    pub fn claim_refund(env: Env, donor: Address, seq: u64) {
+        donor.require_auth();
+
+        let key = Self::donation_key(&env, seq);
+        let mut rec: DonationRecord = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
+
+        if rec.donor != donor {
+            panic_with_error!(&env, HarvestaError::NotDonor);
+        }
+        if rec.status != DonationStatus::Pending {
+            panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+        }
+        if rec.location_verified {
+            panic_with_error!(&env, HarvestaError::LocationAlreadyVerified);
+        }
+        if env.ledger().timestamp() < rec.milestone_deadline {
+            panic_with_error!(&env, HarvestaError::MilestoneDeadlineNotPassed);
+        }
+
+        token::Client::new(&env, &rec.token).transfer(
+            &env.current_contract_address(),
+            &donor,
+            &rec.amount,
+        );
+
+        rec.status = DonationStatus::Refunded;
+        env.storage().persistent().set(&key, &rec);
+
+        env.events()
+            .publish((symbol_short!("clm_ref"), seq), rec.amount);
+    }
+
+    /// Refund donation (admin override)
     pub fn refund(env: Env, seq: u64) {
         Self::require_admin(&env);
 
@@ -203,10 +297,10 @@ impl DonationEscrow {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationEscrowError::EscrowNotFound));
 
         if rec.status != DonationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+            panic_with_error!(&env, DonationEscrowError::AlreadyProcessed);
         }
 
         // CEI: update state before external transfer to prevent reentrancy.
@@ -228,6 +322,11 @@ impl DonationEscrow {
         env.storage()
             .persistent()
             .get(&Self::donation_key(&env, seq))
+    }
+
+    /// Configured milestone deadline window in seconds.
+    pub fn milestone_deadline_secs(env: Env) -> u64 {
+        Self::read_milestone_deadline_secs(&env)
     }
 
     /// Current batch id
@@ -256,10 +355,10 @@ impl DonationEscrow {
         donor.require_auth();
 
         if amount_per_interval <= 0 {
-            panic_with_error!(&env, HarvestaError::AmountPerIntervalMustBePositive);
+            panic_with_error!(&env, DonationEscrowError::AmountPerIntervalMustBePos);
         }
         if interval_seconds == 0 {
-            panic_with_error!(&env, HarvestaError::IntervalSecondsMustBePositive);
+            panic_with_error!(&env, DonationEscrowError::IntervalSecondsMustBePos);
         }
 
         let (xlm, usdc): (Address, Address) = env
@@ -269,7 +368,7 @@ impl DonationEscrow {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
 
         if token != xlm && token != usdc {
-            panic_with_error!(&env, HarvestaError::UnsupportedToken);
+            panic_with_error!(&env, DonationEscrowError::UnsupportedToken);
         }
         contract_utils::assert_whitelisted(&env, &token);
 
@@ -316,21 +415,21 @@ impl DonationEscrow {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::RecurringDonationNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationEscrowError::RecurringDonationNotFound));
 
         if rec.cancelled {
-            panic_with_error!(&env, HarvestaError::DonationCancelled);
+            panic_with_error!(&env, DonationEscrowError::DonationCancelled);
         }
 
         if env.ledger().timestamp() < rec.next_release {
-            panic_with_error!(&env, HarvestaError::IntervalNotElapsed);
+            panic_with_error!(&env, DonationEscrowError::IntervalNotElapsed);
         }
 
         let project: Address = env
             .storage()
             .instance()
             .get(&Self::project_key(&env, rec.project_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ProjectNotRegistered));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationEscrowError::ProjectNotRegistered));
 
         // CEI: update state before external transfer to prevent reentrancy.
         rec.next_release = rec.next_release.checked_add(rec.interval_seconds).expect("next release time overflow");
@@ -364,14 +463,14 @@ impl DonationEscrow {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::RecurringDonationNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationEscrowError::RecurringDonationNotFound));
 
         if rec.donor != donor {
-            panic_with_error!(&env, HarvestaError::NotDonor);
+            panic_with_error!(&env, DonationEscrowError::NotDonor);
         }
 
         if rec.cancelled {
-            panic_with_error!(&env, HarvestaError::DonationAlreadyCancelled);
+            panic_with_error!(&env, DonationEscrowError::DonationAlreadyCancelled);
         }
 
         // CEI: persist cancellation before external transfer.
@@ -407,6 +506,13 @@ impl DonationEscrow {
     }
 
     // ── internal ──────────────────────────────────────────────────────────────
+
+    fn read_milestone_deadline_secs(env: &Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("MSTONE"))
+            .unwrap_or(DEFAULT_MILESTONE_DEADLINE_SECS)
+    }
 
     fn donation_key(env: &Env, seq: u64) -> soroban_sdk::Val {
         (symbol_short!("DON"), seq).into_val(env)
@@ -488,7 +594,7 @@ mod tests {
         token::StellarAssetClient::new(&env, &xlm).mint(&donor, &100_000);
         token::StellarAssetClient::new(&env, &usdc).mint(&donor, &100_000);
 
-        client.initialize(&admin, &xlm, &usdc);
+        client.initialize(&admin, &xlm, &usdc, &0u64);
         client.add_to_whitelist(&xlm);
         client.add_to_whitelist(&usdc);
 
@@ -506,6 +612,61 @@ mod tests {
         assert_eq!(rec.amount, 5_000);
         assert_eq!(rec.tree_count, 3);
         assert_eq!(rec.status, DonationStatus::Pending);
+        assert!(!rec.location_verified);
+        assert_eq!(rec.milestone_deadline, DEFAULT_MILESTONE_DEADLINE_SECS);
+    }
+
+    #[test]
+    fn test_claim_refund_after_deadline() {
+        let (env, _admin, donor, xlm, _usdc, client) = setup();
+
+        let seq = client.donate(&donor, &xlm, &5_000, &3);
+
+        env.ledger()
+            .with_mut(|l| l.timestamp += DEFAULT_MILESTONE_DEADLINE_SECS + 1);
+
+        let balance_before = token::Client::new(&env, &xlm).balance(&donor);
+        client.claim_refund(&donor, &seq);
+        let balance_after = token::Client::new(&env, &xlm).balance(&donor);
+
+        assert_eq!(balance_after - balance_before, 5_000);
+
+        let rec = client.get_donation(&seq).unwrap();
+        assert_eq!(rec.status, DonationStatus::Refunded);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #82)")]
+    fn test_claim_refund_before_deadline_panics() {
+        let (_env, _admin, donor, xlm, _usdc, client) = setup();
+
+        let seq = client.donate(&donor, &xlm, &5_000, &3);
+        client.claim_refund(&donor, &seq);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #83)")]
+    fn test_claim_refund_after_verification_panics() {
+        let (env, _admin, donor, xlm, _usdc, client) = setup();
+
+        let seq = client.donate(&donor, &xlm, &5_000, &3);
+        client.verify_location(&seq);
+
+        env.ledger()
+            .with_mut(|l| l.timestamp += DEFAULT_MILESTONE_DEADLINE_SECS + 1);
+
+        client.claim_refund(&donor, &seq);
+    }
+
+    #[test]
+    fn test_verify_location_marks_donation() {
+        let (_env, _admin, donor, xlm, _usdc, client) = setup();
+
+        let seq = client.donate(&donor, &xlm, &5_000, &3);
+        client.verify_location(&seq);
+
+        let rec = client.get_donation(&seq).unwrap();
+        assert!(rec.location_verified);
     }
 
     #[test]

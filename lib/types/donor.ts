@@ -1,6 +1,7 @@
 import type { GiftDetails } from '@/lib/types/gift';
 import { DEFAULT_GIFT_DETAILS } from '@/lib/types/gift';
 
+// Re-export GiftDetails for convenience
 export type { GiftDetails };
 
 export interface RegionAllocation {
