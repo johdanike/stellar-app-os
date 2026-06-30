@@ -2,11 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Header } from '@/components/organisms/Header/Header';
 import { Footer } from '@/components/organisms/Footer/Footer';
-import { CookieBanner } from '@/components/CookieBanner';
-import { ToastProvider } from '@/components/providers/ToastProvider';
-import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrapper';
-import { FavoritesProvider } from '@/contexts/FavouritesContext';
-import './globals.css';
+import { ToastProvider } from '@/contexts/ToastContext';
+import { ToastContainer } from '@/components/ui/toast';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
 const siteName = 'FarmCredit';
@@ -14,23 +11,8 @@ const siteDescription = 'FarmCredit - Decentralized agricultural credit on Stell
 const ogImage = '/icons/icon-512x512.png';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: {
-    default: siteName,
-    template: `%s | ${siteName}`,
-  },
-  description: siteDescription,
-  applicationName: siteName,
-  keywords: [
-    'Stellar',
-    'FarmCredit',
-    'agriculture',
-    'decentralized finance',
-    'DeFi',
-    'credit',
-    'farming',
-    'blockchain',
-  ],
+  title: 'FarmCredit',
+  description: 'Decentralized agricultural credit on Stellar',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
