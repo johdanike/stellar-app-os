@@ -33,19 +33,21 @@ export function BadgesList({ badges }: BadgesListProps) {
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {badges.map((badge) => (
-            <div 
+            <div
               key={badge.id}
               className={`flex flex-col items-center p-4 rounded-lg border transition-colors ${
-                badge.achieved 
-                  ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800' 
+                badge.achieved
+                  ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800'
                   : 'bg-slate-50 border-slate-200 opacity-60 dark:bg-slate-900 dark:border-slate-800'
               }`}
             >
-              <div className={`mb-3 p-3 rounded-full ${
-                badge.achieved 
-                  ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400' 
-                  : 'bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
-              }`}>
+              <div
+                className={`mb-3 p-3 rounded-full ${
+                  badge.achieved
+                    ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-400'
+                    : 'bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                }`}
+              >
                 {iconMap[badge.iconType] || <Trophy className="w-8 h-8" />}
               </div>
               <h4 className="font-semibold text-center text-sm mb-1">{badge.name}</h4>
@@ -53,7 +55,9 @@ export function BadgesList({ badges }: BadgesListProps) {
                 {badge.description}
               </p>
               {badge.achieved ? (
-                <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">Earned</Badge>
+                <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">
+                  Earned
+                </Badge>
               ) : (
                 <Badge variant="outline">Locked</Badge>
               )}

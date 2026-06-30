@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #120)")]
     fn test_duplicate_commitment_rejected() {
         let (env, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -448,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #69)")]
+    #[should_panic(expected = "Error(Contract, #122)")]
     fn test_cache_miss_with_different_proof_digest_falls_through() {
         // A different proof_digest for the same commitment is a cache miss
         // and falls through to the pre-existing "not Pending" panic — proving
@@ -496,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #69)")]
+    #[should_panic(expected = "Error(Contract, #122)")]
     fn test_proof_cache_disabled_when_ttl_zero() {
         // With TTL=0 the cache is bypassed; replay falls through to the
         // pre-existing "not Pending" panic.

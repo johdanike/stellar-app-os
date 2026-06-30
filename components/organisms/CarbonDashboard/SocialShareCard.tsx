@@ -1,7 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Share2, Check, Globe } from 'lucide-react';
 
@@ -29,7 +36,7 @@ export function SocialShareCard({ totalTrees, totalOffsetKg }: SocialShareCardPr
         console.warn('Share rejected or failed', err);
       }
     }
-    
+
     // Fallback to Clipboard
     try {
       await navigator.clipboard.writeText(shareText);
@@ -57,7 +64,7 @@ export function SocialShareCard({ totalTrees, totalOffsetKg }: SocialShareCardPr
         </div>
       </CardContent>
       <CardFooter>
-        <Button 
+        <Button
           onClick={handleShare}
           variant="secondary"
           className="w-full bg-white text-emerald-700 hover:bg-slate-50 transition-all font-semibold"

@@ -70,25 +70,59 @@ pub enum HarvestaError {
     AuctionExpired = 44,
     BidBelowReservePrice = 45,
 
-    // ── Farmer registry (35–37, 67-68) ───────────────────────────────────────────
+    // ── Farmer registry (35–37) ───────────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
     FarmerNotRegistered = 36,
     InvalidRegion = 37,
-    /// Caller is not a registered validator — gated read/write denied.
-    NotValidator = 67,
-    /// The SHA-256 hash supplied by the caller does not match the one stored
-    /// on-chain for this farmer's identity document.
-    HashMismatch = 68,
-    // ── Farm Plots (150–151) ──────────────────────────────────────────────
-    InvalidCoordinatesCount = 150,
-    PlotAlreadyExists = 151,
 
-    // ── Species registry (62–64, 69-70) ──────────────────────────────────────────────
+    // ── Dispute / arbiter (38–46) ─────────────────────────────────────────────
+    DisputeAlreadyOpen = 38,
+    NoOpenDispute = 39,
+    EscrowAlreadyFinalised = 40,
+    NotArbiter = 41,
+    NotBuyerOrSeller = 42,
+    MilestoneReleaseBlocked = 43,
+    MilestoneAlreadyProcessed = 44,
+    CompletionPercentOutOfRange = 45,
+    TotalReleasedExceedsMile = 46,
+
+    // ── Naira payout (47–54) ──────────────────────────────────────────────────
+    PendingPayoutAlreadyExists = 47,
+    PayoutIntervalTooShort = 48,
+    MaxDailyPayoutExceeded = 49,
+    PayoutNotPending = 50,
+    CanOnlyCancelPending = 51,
+    PayoutNotFound = 52,
+    ExpectedNgnMustBePositive = 53,
+    UnsupportedToken = 54,
+
+    // ── Aggregate impact verifier (55–59) ─────────────────────────────────────
+    FarmCountMustBePositive = 55,
+    PeriodEndBeforeStart = 56,
+    ProofDigestAlreadyReg = 57,
+    ProofNotFound = 58,
+    ProofAlreadyRevoked = 59,
+
+    // ── Nullifier registry (60) ───────────────────────────────────────────────
+    CommitmentAlreadyRegistered = 60,
+
+    // ── KYC attestation (61) ──────────────────────────────────────────────────
+    NotVerifier = 61,
+
+    // ── Species registry (62–64) ──────────────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
-    InvasiveSpecies = 67,
-    HighWaterUse = 68,
+
+    // ── Location proofs (65–66) ───────────────────────────────────────────────
+    OutsideNigeriaRegion = 65,
+    ProofCommitmentAlreadyReg = 66,
+
+    // ── Farmer registry validator gates (67–68) ──────────────────────────────
+    NotValidator = 67,
+    HashMismatch = 68,
+
+    // ── Species policy (69–70) ───────────────────────────────────────────────
     InvasiveSpecies = 69,
     HighWaterUse = 70,
 

@@ -25,16 +25,27 @@ export function CarbonChart({ data }: CarbonChartProps) {
   // O(N) Time / O(N) Space complexity optimization via useMemo
   // Prevents re-calculation/re-allocation on re-renders when data hasn't changed.
   const chartData = useMemo(() => {
-    let cumulative = 0;
-    return data.map((point) => {
-      cumulative += point.offset_kg;
-      return {
-        date: new Date(point.date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
+    return data.reduce<
+      Array<{
+        date: string;
+        rawDate: string;
+        daily_offset: number;
+        cumulative_offset: number;
+      }>
+    >((acc, point) => {
+      const prevCumulative = acc.length > 0 ? acc[acc.length - 1].cumulative_offset : 0;
+      const cumulativeOffset = prevCumulative + point.offset_kg;
+      acc.push({
+        date: new Date(point.date).toLocaleDateString(undefined, {
+          month: 'short',
+          year: 'numeric',
+        }),
         rawDate: point.date, // Keep for sorting if needed, though assumed sorted
         daily_offset: point.offset_kg,
-        cumulative_offset: cumulative,
-      };
-    });
+        cumulative_offset: cumulativeOffset,
+      });
+      return acc;
+    }, []);
   }, [data]);
 
   return (
@@ -50,10 +61,7 @@ export function CarbonChart({ data }: CarbonChartProps) {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={chartData}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorOffset" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
@@ -61,23 +69,27 @@ export function CarbonChart({ data }: CarbonChartProps) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis 
-                dataKey="date" 
-                stroke="#64748b" 
-                fontSize={12} 
+              <XAxis
+                dataKey="date"
+                stroke="#64748b"
+                fontSize={12}
                 tickLine={false}
                 axisLine={false}
                 minTickGap={30}
               />
-              <YAxis 
-                stroke="#64748b" 
-                fontSize={12} 
+              <YAxis
+                stroke="#64748b"
+                fontSize={12}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(val) => `${val}kg`}
               />
-              <Tooltip 
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              <Tooltip
+                contentStyle={{
+                  borderRadius: '8px',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                }}
                 formatter={(value: number) => [`${value} kg`, 'Total Offset']}
               />
               <Area

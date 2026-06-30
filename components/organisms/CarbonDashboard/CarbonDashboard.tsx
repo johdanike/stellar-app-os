@@ -73,12 +73,10 @@ export function CarbonDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalTrees}</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              +3 this month
-            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">+3 this month</p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total CO2 Offset</CardTitle>

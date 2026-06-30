@@ -3,7 +3,8 @@ import { CarbonDashboard } from '@/components/organisms/CarbonDashboard';
 
 export const metadata: Metadata = {
   title: 'Carbon Footprint | Stellar App OS',
-  description: 'Track your personal tree contributions, carbon offset projections, and badge accomplishments.',
+  description:
+    'Track your personal tree contributions, carbon offset projections, and badge accomplishments.',
 };
 
 export default function CarbonDashboardPage() {
