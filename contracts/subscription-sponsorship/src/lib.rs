@@ -261,6 +261,23 @@ impl SubscriptionSponsorship {
                 (symbol_short!("sub"), symbol_short!("cancel")),
                 (subscription_id, rec.sponsor.clone(), symbol_short!("no_funds")),
             );
+        };
+
+        // `env.try()` catches panics from the closure and returns `Result<T, Error>`.
+        // Since `transfer()` returns `()`, the result is `Result<(), Error>`.
+        match env.r#try(lock_next) {
+            Ok(_) => {
+                rec.next_processing = now + rec.interval_seconds;
+                // Keep status as Active
+            }
+            Err(_) => {
+                // Sponsor doesn't have enough funds — cancel gracefully
+                rec.status = SubscriptionStatus::Cancelled;
+                env.events().publish(
+                    (symbol_short!("sub"), symbol_short!("cancel")),
+                    (subscription_id, rec.sponsor.clone(), symbol_short!("no_funds")),
+                );
+            }
         }
 
         env.storage().persistent().set(&key, &rec);
