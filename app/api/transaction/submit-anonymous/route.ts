@@ -6,11 +6,20 @@
  */
 
 import { NextResponse } from 'next/server';
+import { checkSubmitAnonRateLimit } from '@/lib/rateLimit';
 import { submitTransaction } from '@/lib/stellar/transaction';
 import { verifyAnonymousDonationProof } from '@/lib/zk/prover';
 import { isNullifierUsed } from '@/lib/stellar/anonymous-donation';
 import type { AnonymousDonationProof } from '@/lib/zk/types';
 import type { NetworkType } from '@/lib/types/wallet';
+
+function getClientIp(request: Request): string {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    request.headers.get('x-real-ip') ??
+    '127.0.0.1'
+  );
+}
 
 interface SubmitAnonymousRequest {
   transactionXdr: string;
@@ -21,6 +30,25 @@ interface SubmitAnonymousRequest {
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const rateLimit = checkSubmitAnonRateLimit(ip);
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many anonymous submissions. Please try again later.' },
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateLimit.retryAfter ?? 3600),
+            'X-RateLimit-Limit': '5',
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.ceil(rateLimit.reset / 1000)),
+          },
+        }
+      );
+    }
+
     const body = (await request.json()) as SubmitAnonymousRequest;
     const { transactionXdr, network, proof, nullifier } = body;
 

@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Env, IntoVal, Symbol, Vec,
+    contract, contractclient, contractimpl, contracttype, panic_with_error, symbol_short, Address, Env, IntoVal, Symbol, Vec,
 };
 use harvesta_errors::HarvestaError;
 
@@ -13,6 +13,7 @@ pub enum TreeStatus {
     Planted,
     Verified,
     Matured,
+    Rejected,
 }
 
 #[contracttype]
@@ -25,6 +26,7 @@ pub struct TreeRecord {
     pub region: soroban_sdk::String,
     pub planted_at: u64,
     pub status: TreeStatus,
+    pub notes_hash: Option<soroban_sdk::String>,
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -43,6 +45,7 @@ impl TreeRegistry {
         env.storage().instance().set(&symbol_short!("ESCROW"), &escrow);
         env.storage().instance().set(&symbol_short!("TREECOUNT"), &0u64);
         env.storage().instance().set(&symbol_short!("PAUSED"), &false);
+        env.storage().instance().set(&symbol_short!("VERIFIERS"), &Vec::<Address>::new(&env));
     }
 
     /// Mint a new tree (only callable by escrow contract).
@@ -71,6 +74,7 @@ impl TreeRegistry {
             region: region.clone(),
             planted_at: env.ledger().timestamp(),
             status: TreeStatus::Planted,
+            notes_hash: None,
         };
 
         env.storage().persistent().set(&Self::tree_key(&env, tree_id), &record);
@@ -96,6 +100,127 @@ impl TreeRegistry {
         );
 
         tree_id
+    }
+
+    // ── Verifier Management ─────────────────────────────────────────────────────
+
+    /// Add a verifier (admin only)
+    pub fn add_verifier(env: Env, verifier: Address) {
+        Self::require_admin(&env);
+        let mut verifiers: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("VERIFIERS"))
+            .unwrap_or_else(|| Vec::new(&env));
+        if !verifiers.contains(&verifier) {
+            verifiers.push_back(verifier.clone());
+            env.storage().instance().set(&symbol_short!("VERIFIERS"), &verifiers);
+            env.events().publish((Symbol::new(&env, "VerifierAdded"),), verifier);
+        }
+    }
+
+    /// Remove a verifier (admin only)
+    pub fn remove_verifier(env: Env, verifier: Address) {
+        Self::require_admin(&env);
+        let verifiers: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("VERIFIERS"))
+            .unwrap_or_else(|| Vec::new(&env));
+        let mut new_verifiers = Vec::new(&env);
+        for v in verifiers.iter() {
+            if v != verifier {
+                new_verifiers.push_back(v.clone());
+            }
+        }
+        env.storage().instance().set(&symbol_short!("VERIFIERS"), &new_verifiers);
+        env.events().publish((Symbol::new(&env, "VerifierRemoved"),), verifier);
+    }
+
+    /// Get all verifiers
+    pub fn get_verifiers(env: Env) -> Vec<Address> {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("VERIFIERS"))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    // ── Planter Score ──────────────────────────────────────────────────────────
+
+    /// Get a planter's score
+    pub fn get_planter_score(env: Env, planter: Address) -> u64 {
+        env.storage()
+            .persistent()
+            .get(&Self::planter_score_key(&env, &planter))
+            .unwrap_or(0)
+    }
+
+    // ── Verify Tree ───────────────────────────────────────────────────────────
+
+    /// Verify a tree (only callable by whitelisted verifiers)
+    pub fn verify_tree(
+        env: Env,
+        verifier: Address,
+        tree_id: u64,
+        approved: bool,
+        notes_hash: Option<soroban_sdk::String>,
+    ) {
+        Self::assert_not_paused(&env);
+        Self::require_verifier(&env, &verifier);
+
+        let tree_key = Self::tree_key(&env, tree_id);
+        let mut tree_record: TreeRecord = env
+            .storage()
+            .persistent()
+            .get(&tree_key)
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotFound));
+
+        if tree_record.status != TreeStatus::Planted {
+            panic_with_error!(&env, HarvestaError::InvalidStatus);
+        }
+
+        tree_record.notes_hash = notes_hash.clone();
+
+        if approved {
+            tree_record.status = TreeStatus::Verified;
+
+            // Increment planter's score
+            let score_key = Self::planter_score_key(&env, &tree_record.planter);
+            let current_score: u64 = env.storage().persistent().get(&score_key).unwrap_or(0);
+            env.storage().persistent().set(&score_key, &(current_score + 1));
+
+            // Call escrow to release funds
+            let escrow: Address = env
+                .storage()
+                .instance()
+                .get(&symbol_short!("ESCROW"))
+                .unwrap();
+
+            // Define a client for the escrow contract
+            #[contractclient(name = "EscrowClient")]
+            trait EscrowTrait {
+                fn release(env: Env, tree_id: u64);
+            }
+
+            let escrow_client = EscrowClient::new(&env, &escrow);
+            escrow_client.release(&tree_id);
+
+            // Emit TreeVerified event
+            env.events().publish(
+                (Symbol::new(&env, "TreeVerified"), tree_id),
+                (verifier, notes_hash),
+            );
+        } else {
+            tree_record.status = TreeStatus::Rejected;
+
+            // Emit TreeRejected event
+            env.events().publish(
+                (Symbol::new(&env, "TreeRejected"), tree_id),
+                (verifier, notes_hash),
+            );
+        }
+
+        env.storage().persistent().set(&tree_key, &tree_record);
     }
 
     /// Get a tree by ID.
@@ -168,6 +293,10 @@ impl TreeRegistry {
         (symbol_short!("SPONSOR"), sponsor.clone()).into_val(env)
     }
 
+    fn planter_score_key(env: &Env, planter: &Address) -> soroban_sdk::Val {
+        (symbol_short!("SCORE"), planter.clone()).into_val(env)
+    }
+
     fn require_admin(env: &Env) {
         let admin: Address = env
             .storage()
@@ -184,6 +313,18 @@ impl TreeRegistry {
             .get(&symbol_short!("ESCROW"))
             .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized));
         escrow.require_auth();
+    }
+
+    fn require_verifier(env: &Env, verifier: &Address) {
+        verifier.require_auth();
+        let verifiers: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("VERIFIERS"))
+            .unwrap_or_else(|| Vec::new(env));
+        if !verifiers.contains(verifier) {
+            panic_with_error!(env, HarvestaError::NotAuthorized);
+        }
     }
 
     fn assert_not_paused(env: &Env) {
@@ -224,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_mint_tree() {
-        let (env, _, escrow, sponsor, planter, client) = setup();
+        let (env, _, _escrow, sponsor, planter, client) = setup();
 
         let species = String::from_str(&env, "Acacia");
         let region = String::from_str(&env, "Kaduna");
@@ -241,11 +382,12 @@ mod tests {
         assert_eq!(tree.planter, planter);
         assert_eq!(tree.region, region);
         assert_eq!(tree.status, TreeStatus::Planted);
+        assert_eq!(tree.notes_hash, None);
     }
 
     #[test]
     fn test_list_by_sponsor() {
-        let (env, _, escrow, sponsor, planter, client) = setup();
+        let (env, _, _escrow, sponsor, planter, client) = setup();
 
         let species1 = String::from_str(&env, "Acacia");
         let species2 = String::from_str(&env, "Mango");
@@ -259,14 +401,19 @@ mod tests {
     }
 
     #[test]
-    fn test_mint_tree_only_escrow() {
-        let (env, _, escrow, sponsor, planter, client) = setup();
+    fn test_add_and_remove_verifier() {
+        let (env, admin, _, _, _, client) = setup();
+        let verifier = Address::generate(&env);
 
-        let species = String::from_str(&env, "Acacia");
-        let region = String::from_str(&env, "Kaduna");
+        // Test add verifier
+        client.add_verifier(&verifier);
+        let verifiers = client.get_verifiers();
+        assert_eq!(verifiers.len(), 1);
+        assert_eq!(verifiers.get(0).unwrap(), verifier);
 
-        // This should work because we're using the escrow address (from setup)
-        let tree_id = client.mint_tree(&sponsor, &species, &region, &planter);
-        assert_eq!(tree_id, 0);
+        // Test remove verifier
+        client.remove_verifier(&verifier);
+        let verifiers_after = client.get_verifiers();
+        assert_eq!(verifiers_after.len(), 0);
     }
 }

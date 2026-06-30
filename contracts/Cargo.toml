@@ -22,6 +22,7 @@ members = [
     "subscription-sponsorship",
     "planter-registry",
     "sponsor-receipt",
+    "carbon-marketplace",
     "tree-registry",
 ]
 resolver = "2"
