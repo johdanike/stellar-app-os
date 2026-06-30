@@ -65,7 +65,29 @@ impl TreeToken {
             .instance()
             .set(&symbol_short!("BURNCOUNT"), &0u64);
     }
+    pub fn clawback(env: Env, admin: Address, from: Address, amount: i128) {
+        admin.require_auth();
 
+        let saved_admin: Address = env.storage().instance().get(&symbol_short!("ADMIN")).unwrap();
+        if admin != saved_admin {
+            panic!("Unauthorized: Only the designated regulator can execute clawbacks.");
+        }
+
+        let token_address: Address = env.storage().instance().get(&symbol_short!("TOKEN")).unwrap();
+        let client = soroban_sdk::token::Client::new(&env, &token_address);
+        
+        let current_balance = client.balance(&from);
+        if current_balance < amount {
+            panic!("Invalid Operation: Clawback amount exceeds target balance.");
+        }
+
+        client.burn(&from, &amount);
+
+        env.events().publish(
+            (symbol_short!("clawback"), from, admin),
+            amount,
+        );
+    }
     /// Burn `amount` TREE tokens from `burner`'s balance to claim a carbon offset.
     ///
     /// Emits `TokenBurned(burner, token_count)` for ESG audit trail.
