@@ -13,7 +13,7 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const ip = getClientIp(request);
   const { pathname } = request.nextUrl;
 
@@ -38,7 +38,10 @@ export function middleware(request: NextRequest): NextResponse {
     });
   }
 
-  return NextResponse.next();
+  const txId = request.headers.get('x-tx-id') ?? crypto.randomUUID();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-tx-id', txId);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

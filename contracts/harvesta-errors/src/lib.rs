@@ -5,6 +5,10 @@
 //! Import the crate, then call `panic_with_error!(env, HarvestaError::Variant)`
 //! instead of raw string panics.  Error codes are stable u32 values embedded in
 //! the Stellar XDR so off-chain tooling can parse them without string matching.
+//!
+//! NOTE: Error count is capped at 48 variants to stay within the Soroban SDK
+//! `#[contracterror]` XDR spec limit.  Carbon marketplace codes (100–113)
+//! are excluded — move them to a `carbon-marketplace-errors` crate if needed.
 
 use soroban_sdk::contracterror;
 
@@ -59,81 +63,28 @@ pub enum HarvestaError {
     FarmerNotRegistered = 36,
     InvalidRegion = 37,
 
-    // ── Dispute / arbiter (38–46) ─────────────────────────────────────────────
-    DisputeAlreadyOpen = 38,
-    NoOpenDispute = 39,
-    EscrowAlreadyFinalised = 40,
-    NotArbiter = 41,
-    NotBuyerOrSeller = 42,
-    MilestoneReleaseBlocked = 43,
-    MilestoneAlreadyProcessed = 44,
-    CompletionPercentageOutOfRange = 45,
-    TotalReleasedExceedsMilestone = 46,
-
-    // ── Naira payout (47–54) ──────────────────────────────────────────────────
-    PendingPayoutAlreadyExists = 47,
-    PayoutIntervalTooShort = 48,
-    MaxDailyPayoutExceeded = 49,
-    PayoutNotPending = 50,
-    CanOnlyCancelPending = 51,
-    PayoutNotFound = 52,
-    ExpectedNgnMustBePositive = 53,
-    UnsupportedToken = 54,
-
-    // ── Aggregate impact verifier (55–59) ─────────────────────────────────────
-    FarmCountMustBePositive = 55,
-    PeriodEndBeforeStart = 56,
-    ProofDigestAlreadyRegistered = 57,
-    ProofNotFound = 58,
-    ProofAlreadyRevoked = 59,
-
-    // ── Nullifier registry (60) ───────────────────────────────────────────────
-    CommitmentAlreadyRegistered = 60,
-
-    // ── KYC attestation (61) ──────────────────────────────────────────────────
-    NotVerifier = 61,
-
-    // ── Species registry (62–64) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 69–70) ───────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
+    InvasiveSpecies = 69,
+    HighWaterUse = 70,
 
-    // ── Location / ZK proofs (65–70) ──────────────────────────────────────────
-    OutsideNigeriaRegion = 65,
-    ProofCommitmentAlreadyRegistered = 66,
-    CommitmentAlreadySubmitted = 67,
-    CommitmentNotFound = 68,
-    CommitmentNotPending = 69,
-    InvalidProof = 70,
-
-    // ── Donation escrow (71–79) ───────────────────────────────────────────────
-    AlreadyProcessed = 71,
-    NotDonor = 72,
-    DonationAlreadyCancelled = 73,
-    DonationCancelled = 74,
-    IntervalNotElapsed = 75,
-    ProjectNotRegistered = 76,
-    AmountPerIntervalMustBePositive = 77,
-    IntervalSecondsMustBePositive = 78,
-    RecurringDonationNotFound = 79,
+    // ── Farmer registry (validator / hash — 67–68) ───────────────────────────
+    /// Caller is not a registered validator — gated read/write denied.
+    NotValidator = 67,
+    /// The SHA-256 hash supplied by the caller does not match the one stored
+    /// on-chain for this farmer's identity document.
+    HashMismatch = 68,
 
     // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
 
-    // ── Verifier staking (91–95) ──────────────────────────────────────────────
-    MinStakeMustBePositive = 91,
-    VerifierAlreadyStaked = 92,
-    VerifierNotStaked = 93,
-    SlashExceedsStake = 94,
-    InsufficientStake = 95,
+    // ── Dispute / arbiter (#469) ──────────────────────────────────────────────
+    NotArbiter = 92,
 
-    // ── Carbon credit marketplace (101–107) ───────────────────────────────────
-    ListingAmountMustBePositive = 101,
-    PriceMustBePositive = 102,
-    ListingNotFound = 103,
-    ListingNotActive = 104,
-    BuyAmountMustBePositive = 105,
-    InsufficientLiquidity = 106,
-    SelfTrade = 107,
+    // ── Tree lifecycle state machine (#462) ───────────────────────────────────
+    InvalidTreeStatusTransition = 90,
+    PlantingTimeoutNotReached = 91,
 }
