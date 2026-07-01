@@ -416,4 +416,88 @@ mod tests {
         let verifiers_after = client.get_verifiers();
         assert_eq!(verifiers_after.len(), 0);
     }
+
+    #[test]
+    fn test_sequential_id_generation_and_get_tree() {
+        let env = Env::default();
+        // Authorise only the escrow for mint operations
+        let contract_id = env.register_contract(None, TreeRegistry);
+        let client = TreeRegistryClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let escrow = Address::generate(&env);
+        let sponsor = Address::generate(&env);
+        let planter = Address::generate(&env);
+
+        client.initialize(&admin, &escrow);
+
+        // Only escrow is authorised to call mint_tree
+        env.mock_auths(&[&escrow]);
+
+        let species = String::from_str(&env, "Oak");
+        let region = String::from_str(&env, "Nairobi");
+
+        let id0 = client.mint_tree(&sponsor, &species, &region, &planter);
+        let id1 = client.mint_tree(&sponsor, &species, &region, &planter);
+        let id2 = client.mint_tree(&sponsor, &species, &region, &planter);
+
+        assert_eq!(id0, 0);
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+        assert_eq!(client.tree_count(), 3);
+
+        // get_tree returns correct record for id1
+        let tree = client.get_tree(&1).unwrap();
+        assert_eq!(tree.id, 1);
+        assert_eq!(tree.species, species);
+        assert_eq!(tree.sponsor, sponsor);
+        assert_eq!(tree.planter, planter);
+        assert_eq!(tree.region, region);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_only_escrow_can_call_mint_tree() {
+        // No auths are mocked — mint_tree must panic because escrow.require_auth fails
+        let env = Env::default();
+        let contract_id = env.register_contract(None, TreeRegistry);
+        let client = TreeRegistryClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let escrow = Address::generate(&env);
+        let sponsor = Address::generate(&env);
+        let planter = Address::generate(&env);
+
+        client.initialize(&admin, &escrow);
+
+        let species = String::from_str(&env, "Pine");
+        let region = String::from_str(&env, "Lagos");
+
+        // No env.mock_auths set — require_escrow should panic on unauthorised call
+        client.mint_tree(&sponsor, &species, &region, &planter);
+    }
+
+    #[test]
+    fn test_event_emission_on_mint() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, TreeRegistry);
+        let client = TreeRegistryClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let escrow = Address::generate(&env);
+        let sponsor = Address::generate(&env);
+        let planter = Address::generate(&env);
+
+        client.initialize(&admin, &escrow);
+
+        env.mock_auths(&[&escrow]);
+
+        let species = String::from_str(&env, "Baobab");
+        let region = String::from_str(&env, "Kaduna");
+
+        let id = client.mint_tree(&sponsor, &species, &region, &planter);
+
+        // Assert the TreeMinted event was published with expected payload
+        env.events().assert_published((Symbol::new(&env, "TreeMinted"), id), (sponsor, species, region, planter));
+    }
 }

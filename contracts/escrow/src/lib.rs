@@ -431,6 +431,7 @@ mod tests {
         assert_eq!(rec.amount, 10_000);
         assert_eq!(rec.sponsor, sponsor);
         assert_eq!(rec.planter, planter);
+        assert_eq!(rec.token, token);
         assert_eq!(rec.status, EscrowStatus::Pending);
     }
 
@@ -448,6 +449,18 @@ mod tests {
 
         let rec = client.get_escrow(&1u64).unwrap();
         assert_eq!(rec.status, EscrowStatus::Released);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unauthorized_release_rejected() {
+        let (env, _admin, _verifier, sponsor, planter, token, client) = setup();
+
+        client.deposit(&sponsor, &planter, &1u64, &token, &10_000);
+
+        // Only the sponsor is authorised, not the verifier.
+        env.mock_auths(&[&sponsor]);
+        client.release(&1u64);
     }
 
     #[test]
