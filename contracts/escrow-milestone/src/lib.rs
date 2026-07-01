@@ -182,7 +182,6 @@ impl EscrowMilestone {
 
         let payout = (state.total_amount * completion_pct as i128) / 100;
         let remainder = state.total_amount - state.released;
-        let (_, amm, xlm, usdc): (Address, Address, Address, Address) = env.storage().instance().get(&symbol_short!("ADMIN")).expect("contract not initialized");
         let payout_shares = if remainder > 0 { (payout * state.lp_shares) / remainder } else { 0 };
 
         if state.released + payout > state.total_amount {
@@ -293,7 +292,6 @@ impl EscrowMilestone {
         }
 
         let remainder = state.total_amount - state.released;
-        let (_, amm, xlm, usdc): (Address, Address, Address, Address) = env.storage().instance().get(&symbol_short!("ADMIN")).expect("contract not initialized");
         if remainder <= 0 {
             panic!("nothing left to release");
         }
@@ -371,7 +369,7 @@ impl EscrowMilestone {
         }
 
         let remainder = state.total_amount - state.released;
-        let (_, amm, xlm, usdc): (Address, Address, Address, Address) = env.storage().instance().get(&symbol_short!("ADMIN")).expect("contract not initialized");
+        let (_, amm, _xlm, _usdc): (Address, Address, Address, Address) = env.storage().instance().get(&symbol_short!("ADMIN")).expect("contract not initialized");
 
         if release_to_seller {
             // Release remaining funds to the farmer
@@ -383,7 +381,7 @@ impl EscrowMilestone {
                     &withdrawn_amount,
                 );
                 state.released += remainder;
-        state.lp_shares = 0;
+                state.lp_shares = 0;
             }
             state.status = EscrowStatus::Completed;
         } else {
@@ -398,7 +396,6 @@ impl EscrowMilestone {
             }
             state.lp_shares = 0;
             state.status = EscrowStatus::Refunded;
-        state.lp_shares = 0;
         }
 
         state.dispute_open = false;
