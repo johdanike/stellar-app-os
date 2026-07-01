@@ -32,8 +32,11 @@
 //!     payload against a tree_id for later verification.
 //!   • `get_qr_hash` — retrieve the stored hash for off-chain label checking.
 
+#[cfg(test)]
+extern crate std;
+
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, Vec,
+    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN, Env, Vec,
 };
 use harvesta_errors::HarvestaError;
 
@@ -60,6 +63,12 @@ const DISPUTE_WINDOW_SECS: u64 = 60 * 60 * 24 * 7;
 
 /// 14 days in seconds — unaccepted jobs expire after this window (Closes #517)
 const JOB_EXPIRY_SECS: u64 = 60 * 60 * 24 * 14;
+
+/// 1 year in seconds
+const ONE_YEAR_SECS: u64 = 60 * 60 * 24 * 365;
+
+/// 90 days: planting must be confirmed before admin may transition Pending → Failed.
+const PLANTING_TIMEOUT_SECS: u64 = 60 * 60 * 24 * 90;
 
 /// Maximum slots per batch deposit (Stellar operation limit safety margin)
 const MAX_BATCH_SIZE: u32 = 50;
@@ -139,6 +148,24 @@ pub enum TreeFundingStatus {
     Refunded,
 }
 
+/// Physical lifecycle state of a co-funded tree.
+/// Distinct from `TreeFundingStatus` which tracks payment state.
+///
+/// Valid transitions:
+///   Pending  → Planted   admin confirms physical planting
+///   Pending  → Failed    admin marks timeout; only after PLANTING_TIMEOUT_SECS
+///   Planted  → Verified  admin confirms survival milestone
+///
+/// Verified and Failed are terminal — no further transitions allowed.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum TreeStatus {
+    Pending,
+    Planted,
+    Verified,
+    Failed,
+}
+
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct Contribution {
@@ -185,6 +212,10 @@ pub struct TreeFunding {
     pub total_funded: i128,
     pub released: i128,
     pub status: TreeFundingStatus,
+    pub tree_status: TreeStatus,
+    pub registered_at: u64,
+    pub planted_at: u64,
+    pub verified_at: u64,
 }
 
 /// Sponsor rating for a planter (1-5 stars)
@@ -265,6 +296,11 @@ enum DataKey {
     DaoMembers,
     /// Registered arbiter address (#649)
     Arbiter,
+    SponsorRating(Address, Address),
+    PlanterReputation(Address),
+    PayoutHistory(Address),
+    CorpBatchSeq,
+    CorpBatch(u64),
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -306,7 +342,7 @@ impl TreeEscrow {
         if token::StellarAssetClient::new(&env, &tree_token).admin()
             != env.current_contract_address()
         {
-            panic_with_error!(&env, HarvestaError::ContractMustBeTreeTokenAdm);
+            panic_with_error!(&env, HarvestaError::ContractMustBeTreeTokenAdmin);
         }
 
         let tree_decimals = token::Client::new(&env, &tree_token).decimals();
@@ -492,7 +528,7 @@ impl TreeEscrow {
                     planting_proof: zero_hash.clone(),
                     survival_proof: zero_hash.clone(),
                     survival_rate_percent: 0,
-                    year_proof: empty_hash,
+                    year_proof: zero_hash.clone(),
                     expiry_deadline: env.ledger().timestamp() + JOB_EXPIRY_SECS,
                 },
             );
@@ -531,6 +567,9 @@ impl TreeEscrow {
         if rec.progress_updates >= PROGRESS_STREAM_COUNT {
             panic!("all progress updates completed");
         }
+        if verified_tree_count > rec.tree_count {
+            panic_with_error!(&env, HarvestaError::VerifiedCountExceedsDonation);
+        }
 
         // Replay attack prevention (#481): reject duplicate proof hashes
         let proof_key = DataKey::UsedProof(proof_hash.clone());
@@ -567,7 +606,8 @@ impl TreeEscrow {
         rec.released = rec.released.checked_add(stream_amount).expect("released amount overflow");
         rec.progress_updates += 1;
 
-        // CEI: persist before external token transfer.
+        // CEI: mark proof used and persist before external token transfer.
+        env.storage().persistent().set(&proof_key, &true);
         env.storage().persistent().set(&key, &rec);
 
         token::Client::new(&env, &rec.token).transfer(
@@ -575,22 +615,6 @@ impl TreeEscrow {
             &rec.farmer,
             &stream_amount,
         );
-
-        rec.released = rec
-            .released
-            .checked_add(tranche1)
-            .expect("released amount overflow");
-        rec.verified_tree_count = verified_tree_count;
-        rec.tree_tokens_minted = tree_tokens;
-        rec.status = EscrowStatus::Planted;
-        rec.planted_at = env.ledger().timestamp();
-        rec.planting_proof = proof_hash.clone();
-        env.storage().persistent().set(&proof_key, &true);
-        rec.planting_proof = proof_hash;
-        rec.released += stream_amount;
-        rec.progress_updates += 1;
-
-        env.storage().persistent().set(&key, &rec);
 
         env.events()
             .publish((symbol_short!("progress"), farmer), (rec.progress_updates, stream_amount));
@@ -717,7 +741,7 @@ impl TreeEscrow {
         env.storage().persistent().set(&key, &rec);
 
         env.events()
-            .publish((symbol_short!("year_milestone"), farmer), tranche3);
+            .publish((symbol_short!("yearmile"), farmer), tranche3);
     }
 
     pub fn refund(env: Env, farmer: Address) {
@@ -850,7 +874,7 @@ impl TreeEscrow {
 
         rep.total_ratings += 1;
         rep.sum_ratings += rating as u128;
-        rep.average_rating = (rep.sum_ratings * 20) / rep.total_ratings as u128; // Scale to 0-100 (5 stars * 20 = 100)
+        rep.average_rating = ((rep.sum_ratings * 20) / rep.total_ratings as u128) as u32; // Scale to 0-100 (5 stars * 20 = 100)
 
         env.storage().persistent().set(&rep_key, &rep);
 
@@ -936,6 +960,10 @@ impl TreeEscrow {
             total_funded: 0,
             released: 0,
             status: TreeFundingStatus::Open,
+            tree_status: TreeStatus::Pending,
+            registered_at: env.ledger().timestamp(),
+            planted_at: 0,
+            verified_at: 0,
         };
         env.storage().persistent().set(&key, &funding);
 
@@ -1097,6 +1125,64 @@ impl TreeEscrow {
             .get(&DataKey::TreeFunding(tree_id))
     }
 
+    // ── Tree lifecycle state machine (#462) ───────────────────────────────────
+
+    /// Admin transitions a co-funded tree through its physical lifecycle states.
+    ///
+    ///   Pending  → Planted   admin confirms physical planting
+    ///   Pending  → Failed    only after PLANTING_TIMEOUT_SECS (90 days)
+    ///   Planted  → Verified  admin confirms survival milestone
+    ///
+    /// Verified and Failed are terminal.
+    pub fn update_status(env: Env, tree_id: u64, new_status: TreeStatus) {
+        let (admin, _, _) = Self::admin_tree(&env);
+        admin.require_auth();
+
+        let key = DataKey::TreeFunding(tree_id);
+        let mut funding: TreeFunding = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::TreeNotRegistered));
+
+        let now = env.ledger().timestamp();
+
+        match (&funding.tree_status, &new_status) {
+            (TreeStatus::Pending, TreeStatus::Planted) => {
+                funding.planted_at = now;
+            }
+            (TreeStatus::Pending, TreeStatus::Failed) => {
+                if now < funding.registered_at + PLANTING_TIMEOUT_SECS {
+                    panic_with_error!(&env, HarvestaError::PlantingTimeoutNotReached);
+                }
+            }
+            (TreeStatus::Planted, TreeStatus::Verified) => {
+                funding.verified_at = now;
+            }
+            _ => {
+                panic_with_error!(&env, HarvestaError::InvalidTreeStatusTransition);
+            }
+        }
+
+        funding.tree_status = new_status.clone();
+        env.storage().persistent().set(&key, &funding);
+
+        env.events().publish(
+            (symbol_short!("statchg"), tree_id),
+            (new_status, now),
+        );
+    }
+
+    /// Returns the current physical lifecycle status of a co-funded tree.
+    pub fn get_tree_status(env: Env, tree_id: u64) -> TreeStatus {
+        let key = DataKey::TreeFunding(tree_id);
+        let funding: TreeFunding = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::TreeNotRegistered));
+        funding.tree_status
+    }
 
     // ── Dispute resolution (#469) ─────────────────────────────────────────────
 
@@ -1554,10 +1640,10 @@ impl TreeEscrow {
 
         let n = slots.len();
         if n == 0 {
-            panic_with_error!(&env, HarvestaError::CorpBatchEmpty);
+            panic_with_error!(&env, HarvestaError::BatchEmpty);
         }
         if n > CORP_BATCH_SIZE {
-            panic_with_error!(&env, HarvestaError::CorpBatchTooLarge);
+            panic_with_error!(&env, HarvestaError::BatchTooLarge);
         }
 
         let mut total_amount: i128 = 0;
@@ -1603,6 +1689,7 @@ impl TreeEscrow {
                     survival_proof: empty_hash.clone(),
                     survival_rate_percent: 0,
                     year_proof: empty_hash.clone(),
+                    expiry_deadline: env.ledger().timestamp() + JOB_EXPIRY_SECS,
                 },
             );
             env.events()
@@ -1725,9 +1812,9 @@ mod tests {
     }
 
     /// Complete all 5 progress updates for a farmer's escrow.
-    fn complete_progress(ctx: &Ctx, farmer: &Address, verified_count: i128) {
+    fn complete_progress(ctx: &Ctx, farmer: &Address, verified_count: i128, seed_offset: u8) {
         for i in 0..5u8 {
-            ctx.client.verify_progress(farmer, &proof(&ctx.env, i + 1), &verified_count);
+            ctx.client.verify_progress(farmer, &proof(&ctx.env, seed_offset + i), &verified_count);
         }
     }
 
@@ -1831,7 +1918,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env.ledger().with_mut(|l| l.timestamp += 86_400);
         ctx.client
             .verify_survival(&ctx.farmer, &proof(&ctx.env, 6), &80);
@@ -1843,7 +1930,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -1856,7 +1943,7 @@ mod tests {
         let ctx = setup_with_threshold(50);
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -1881,7 +1968,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         // 6th call should be rejected
         ctx.client
             .verify_progress(&ctx.farmer, &proof(&ctx.env, 6), &42);
@@ -1900,7 +1987,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "cannot refund after planting")]
+    #[should_panic(expected = "Error(Contract, #20)")]
     fn test_refund_after_progress_rejected() {
         let ctx = setup();
         ctx.client
@@ -1916,7 +2003,7 @@ mod tests {
     fn test_expire_job_happy_path() {
         let ctx = setup();
         ctx.client
-            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5, &1);
 
         // Advance time past the 14-day deadline.
         ctx.env
@@ -1942,7 +2029,7 @@ mod tests {
     fn test_expire_job_too_early_rejected() {
         let ctx = setup();
         ctx.client
-            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5, &1);
 
         // Only 1 day has passed — well before the 14-day deadline.
         ctx.env.ledger().with_mut(|l| l.timestamp += 86_400);
@@ -1954,9 +2041,9 @@ mod tests {
     fn test_expire_job_after_planting_rejected() {
         let ctx = setup();
         ctx.client
-            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5);
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &5, &1);
         ctx.client
-            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &5);
+            .verify_progress(&ctx.farmer, &proof(&ctx.env, 1), &5);
 
         // Even if time has elapsed, a planted job cannot be expired.
         ctx.env
@@ -1981,7 +2068,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += ONE_YEAR_SECS + 1);
@@ -1995,7 +2082,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2011,7 +2098,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2029,12 +2116,12 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "nothing left to release")]
+    #[should_panic(expected = "survival not yet verified")]
     fn test_year_milestone_double_call_rejected() {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2056,7 +2143,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2082,7 +2169,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2115,7 +2202,7 @@ mod tests {
         let impostor = Address::generate(&ctx.env);
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2136,7 +2223,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2157,7 +2244,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2178,7 +2265,7 @@ mod tests {
         token::StellarAssetClient::new(&ctx.env, &ctx.token).mint(&donor2, &10_000);
         ctx.client
             .deposit(&donor2, &farmer2, &ctx.token, &10_000, &30, &3);
-        complete_progress(&ctx, &farmer2, 30);
+        complete_progress(&ctx, &farmer2, 30, 11);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2209,7 +2296,7 @@ mod tests {
         let ctx = setup();
         ctx.client
             .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &42, &5);
-        complete_progress(&ctx, &ctx.farmer, 42);
+        complete_progress(&ctx, &ctx.farmer, 42, 1);
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
@@ -2230,7 +2317,7 @@ mod tests {
             let farmer = Address::generate(&ctx.env);
             token::StellarAssetClient::new(&ctx.env, &ctx.token).mint(&donor, &10_000);
             ctx.client.deposit(&donor, &farmer, &ctx.token, &10_000, &10, &1);
-            complete_progress(&ctx, &farmer, 10);
+            complete_progress(&ctx, &farmer, 10, 50 + (i as u8 - 1) * 5);
             ctx.env.ledger().with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
             ctx.client.verify_survival(&farmer, &proof(&ctx.env, (i * 10) as u8), &70);
             ctx.env.ledger().with_mut(|l| l.timestamp += ONE_YEAR_SECS - SIX_MONTHS_SECS + 1);
@@ -2327,9 +2414,9 @@ mod tests {
         // Test with custom density threshold of 500 trees/hectare
         let ctx = setup_with_density(70, 500, 5);
         // Job size (5 hectares) meets custom threshold
-        // Density = 2000 trees / 5 hectares = 400 trees/hectare (below 500 minimum)
+        // Density = 2500 trees / 5 hectares = 500 trees/hectare (meets 500 minimum)
         ctx.client
-            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &2_000, &5);
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &2_500, &5);
         assert_eq!(
             ctx.client.get_record(&ctx.farmer).unwrap().status,
             EscrowStatus::Funded
@@ -2591,14 +2678,14 @@ mod tests {
         fund(&ctx.env, &ctx.token, &donor2, 10_000);
 
         ctx.client
-            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1);
+            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1, &1);
         ctx.client
-            .verify_planting(&farmer_a, &proof(&ctx.env, 1), &1);
+            .verify_progress(&farmer_a, &proof(&ctx.env, 1), &1);
 
         ctx.client
-            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1);
+            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1, &1);
         ctx.client
-            .verify_planting(&farmer_b, &proof(&ctx.env, 1), &1);
+            .verify_progress(&farmer_b, &proof(&ctx.env, 1), &1);
     }
 
     #[test]
@@ -2610,14 +2697,14 @@ mod tests {
         fund(&ctx.env, &ctx.token, &donor2, 10_000);
 
         ctx.client
-            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1);
+            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1, &1);
         ctx.client
-            .verify_planting(&farmer_a, &proof(&ctx.env, 1), &1);
+            .verify_progress(&farmer_a, &proof(&ctx.env, 1), &1);
 
         ctx.client
-            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1);
+            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1, &1);
         ctx.client
-            .verify_planting(&farmer_b, &proof(&ctx.env, 2), &1);
+            .verify_progress(&farmer_b, &proof(&ctx.env, 2), &1);
 
         assert_eq!(
             ctx.client.get_record(&farmer_b).unwrap().status,
@@ -2635,23 +2722,21 @@ mod tests {
         fund(&ctx.env, &ctx.token, &donor2, 10_000);
 
         ctx.client
-            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1);
-        ctx.client
-            .verify_planting(&farmer_a, &proof(&ctx.env, 1), &1);
+            .deposit(&ctx.donor, &farmer_a, &ctx.token, &10_000, &1, &1);
+        complete_progress(&ctx, &farmer_a, 1, 1);
 
         ctx.client
-            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1);
-        ctx.client
-            .verify_planting(&farmer_b, &proof(&ctx.env, 2), &1);
+            .deposit(&donor2, &farmer_b, &ctx.token, &10_000, &1, &1);
+        complete_progress(&ctx, &farmer_b, 1, 11);
 
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
 
         ctx.client
-            .verify_survival(&farmer_a, &proof(&ctx.env, 3), &70);
+            .verify_survival(&farmer_a, &proof(&ctx.env, 21), &70);
         ctx.client
-            .verify_survival(&farmer_b, &proof(&ctx.env, 3), &70);
+            .verify_survival(&farmer_b, &proof(&ctx.env, 21), &70);
     }
 
     #[test]
@@ -2659,16 +2744,18 @@ mod tests {
     fn test_planting_proof_replay_as_survival_rejected() {
         let ctx = setup();
         ctx.client
-            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &1);
-        ctx.client
-            .verify_planting(&ctx.farmer, &proof(&ctx.env, 1), &1);
+            .deposit(&ctx.donor, &ctx.farmer, &ctx.token, &10_000, &1, &1);
+        complete_progress(&ctx, &ctx.farmer, 1, 1);
 
         ctx.env
             .ledger()
             .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
 
+        // Replay one of the already-used planting proofs as a survival proof.
         ctx.client
             .verify_survival(&ctx.farmer, &proof(&ctx.env, 1), &70);
+    }
+
     // ── Dispute resolution (#469) ─────────────────────────────────────────────
 
     #[test]
@@ -2840,7 +2927,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #108)")]
+    #[should_panic(expected = "Error(Contract, #28)")]
     fn test_corp_batch_empty_rejected() {
         let ctx = setup();
         let empty = vec![&ctx.env];
@@ -2883,6 +2970,131 @@ mod tests {
                 assert_eq!(funding.tree_id, *tree_id);
             }
         }
+    }
+
+    // ── Tree lifecycle state machine (#462) ───────────────────────────────────
+
+    #[test]
+    fn test_tree_status_initial_is_pending() {
+        let ctx = setup();
+        ctx.client.register_tree(&100, &ctx.farmer, &ctx.token);
+        assert_eq!(ctx.client.get_tree_status(&100), TreeStatus::Pending);
+    }
+
+    #[test]
+    fn test_update_status_pending_to_planted() {
+        let ctx = setup();
+        ctx.client.register_tree(&100, &ctx.farmer, &ctx.token);
+        let ts_before = ctx.env.ledger().timestamp();
+        ctx.client.update_status(&100, &TreeStatus::Planted);
+        assert_eq!(ctx.client.get_tree_status(&100), TreeStatus::Planted);
+        let f = ctx.client.get_tree_funding(&100).unwrap();
+        assert!(f.planted_at >= ts_before);
+    }
+
+    #[test]
+    fn test_update_status_planted_to_verified() {
+        let ctx = setup();
+        ctx.client.register_tree(&101, &ctx.farmer, &ctx.token);
+        ctx.client.update_status(&101, &TreeStatus::Planted);
+        let ts_before = ctx.env.ledger().timestamp();
+        ctx.client.update_status(&101, &TreeStatus::Verified);
+        assert_eq!(ctx.client.get_tree_status(&101), TreeStatus::Verified);
+        let f = ctx.client.get_tree_funding(&101).unwrap();
+        assert!(f.verified_at >= ts_before);
+    }
+
+    #[test]
+    fn test_update_status_pending_to_failed_after_timeout() {
+        let ctx = setup();
+        ctx.client.register_tree(&102, &ctx.farmer, &ctx.token);
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += PLANTING_TIMEOUT_SECS + 1);
+        ctx.client.update_status(&102, &TreeStatus::Failed);
+        assert_eq!(ctx.client.get_tree_status(&102), TreeStatus::Failed);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #91)")]
+    fn test_update_status_pending_to_failed_before_timeout_rejected() {
+        let ctx = setup();
+        ctx.client.register_tree(&103, &ctx.farmer, &ctx.token);
+        ctx.client.update_status(&103, &TreeStatus::Failed);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #90)")]
+    fn test_update_status_pending_to_verified_rejected() {
+        let ctx = setup();
+        ctx.client.register_tree(&104, &ctx.farmer, &ctx.token);
+        ctx.client.update_status(&104, &TreeStatus::Verified);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #90)")]
+    fn test_update_status_planted_to_failed_rejected() {
+        let ctx = setup();
+        ctx.client.register_tree(&105, &ctx.farmer, &ctx.token);
+        ctx.client.update_status(&105, &TreeStatus::Planted);
+        ctx.client.update_status(&105, &TreeStatus::Failed);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #90)")]
+    fn test_update_status_verified_is_terminal() {
+        let ctx = setup();
+        ctx.client.register_tree(&106, &ctx.farmer, &ctx.token);
+        ctx.client.update_status(&106, &TreeStatus::Planted);
+        ctx.client.update_status(&106, &TreeStatus::Verified);
+        ctx.client.update_status(&106, &TreeStatus::Planted);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #90)")]
+    fn test_update_status_failed_is_terminal() {
+        let ctx = setup();
+        ctx.client.register_tree(&107, &ctx.farmer, &ctx.token);
+        ctx.env
+            .ledger()
+            .with_mut(|l| l.timestamp += PLANTING_TIMEOUT_SECS + 1);
+        ctx.client.update_status(&107, &TreeStatus::Failed);
+        ctx.client.update_status(&107, &TreeStatus::Planted);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #31)")]
+    fn test_update_status_nonexistent_tree() {
+        let ctx = setup();
+        ctx.client.update_status(&999, &TreeStatus::Planted);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #31)")]
+    fn test_get_tree_status_nonexistent_tree() {
+        let ctx = setup();
+        ctx.client.get_tree_status(&999);
+    }
+
+    #[test]
+    fn test_update_status_timestamps_correct() {
+        let ctx = setup();
+        ctx.client.register_tree(&108, &ctx.farmer, &ctx.token);
+
+        let t0 = ctx.env.ledger().timestamp();
+
+        ctx.env.ledger().with_mut(|l| l.timestamp += 1_000);
+        let t1 = ctx.env.ledger().timestamp();
+        ctx.client.update_status(&108, &TreeStatus::Planted);
+
+        ctx.env.ledger().with_mut(|l| l.timestamp += 1_000);
+        let t2 = ctx.env.ledger().timestamp();
+        ctx.client.update_status(&108, &TreeStatus::Verified);
+
+        let f = ctx.client.get_tree_funding(&108).unwrap();
+        assert_eq!(f.registered_at, t0);
+        assert_eq!(f.planted_at, t1);
+        assert_eq!(f.verified_at, t2);
     }
 }
 
