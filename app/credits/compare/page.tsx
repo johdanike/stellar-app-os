@@ -1,5 +1,6 @@
 'use client';
 
+import type { JSX } from 'react';
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ComparisonTool } from '@/components/organisms/ComparisonTool/ComparisonTool';
@@ -13,7 +14,6 @@ export default function ComparePage() {
 
   const handleAddToCart = useCallback(
     (projectId: string) => {
-      console.info('Adding project to cart:', projectId);
       router.push(`/credits/purchase?projectId=${projectId}`);
     },
     [router]

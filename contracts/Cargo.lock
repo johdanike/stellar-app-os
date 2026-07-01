@@ -23,6 +23,7 @@ version = "0.1.0"
 dependencies = [
  "contract-utils",
  "harvesta-errors",
+ "shared",
  "soroban-sdk 21.7.7",
 ]
 
@@ -282,14 +283,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "carbon-credits"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
 name = "carbon-marketplace"
 version = "0.1.0"
 dependencies = [
  "admin-controls",
  "harvesta-errors",
-name = "carbon-credits"
-version = "0.1.0"
-dependencies = [
  "soroban-sdk 21.7.7",
 ]
 
@@ -1119,6 +1124,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "planter-blacklist"
+version = "0.1.0"
+dependencies = [
+ "harvesta-errors",
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
 name = "planter-registry"
 version = "0.1.0"
 dependencies = [
@@ -1511,6 +1524,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "shared"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1554,21 +1574,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "soroban-builtin-sdk-macros"
-version = "22.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf2e42bf80fcdefb3aae6ff3c7101a62cf942e95320ed5b518a1705bc11c6b2f"
-dependencies = [
- "itertools 0.10.5",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -1584,27 +1589,6 @@ dependencies = [
  "num-traits",
  "serde",
  "soroban-env-macros 21.2.1",
- "soroban-wasmi",
- "static_assertions",
- "stellar-xdr 21.2.0",
- "wasmparser",
-]
-
-[[package]]
-name = "soroban-env-common"
-version = "22.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "027cd856171bfd6ad2c0ffb3b7dfe55ad7080fb3050c36ad20970f80da634472"
-dependencies = [
- "arbitrary",
- "crate-git-revision",
- "ethnum",
- "num-derive",
- "num-traits",
- "serde",
- "soroban-env-macros 22.1.3",
- "soroban-wasmi",
- "static_assertions",
  "soroban-wasmi",
  "static_assertions",
  "stellar-xdr 21.2.0",
@@ -1745,21 +1729,6 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "stellar-xdr 21.2.0",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "soroban-env-macros"
-version = "22.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00eff744764ade3bc480e4909e3a581a240091f3d262acdce80b41f7069b2bd9"
-dependencies = [
- "itertools 0.10.5",
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
  "stellar-xdr 22.1.0",
  "syn 2.0.117",
 ]
@@ -1845,26 +1814,6 @@ dependencies = [
  "crate-git-revision",
  "darling 0.20.11",
  "itertools 0.11.0",
- "proc-macro2",
- "quote",
- "rustc_version",
- "sha2",
- "soroban-env-common 21.2.1",
- "soroban-spec 21.7.7",
- "soroban-spec-rust 21.7.7",
- "stellar-xdr 21.2.0",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "soroban-sdk-macros"
-version = "22.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42b205cd86b34d530db87667bd287fbb194166d79b368227fd842110a914fde8"
-dependencies = [
- "crate-git-revision",
- "darling 0.20.11",
- "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "rustc_version",
@@ -2191,6 +2140,7 @@ name = "tree-registry"
 version = "0.1.0"
 dependencies = [
  "contract-utils",
+ "escrow",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
 ]

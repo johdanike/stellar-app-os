@@ -33,9 +33,18 @@
 
 use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, xdr::ToXdr, Address,
-    Bytes, BytesN, Env, IntoVal,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short,
+    xdr::ToXdr, Address, Bytes, BytesN, Env, IntoVal,
 };
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum ZkLocationError {
+    OutsideNigeriaRegion = 65,
+    CommitmentAlreadySubmitted = 67,
+    CommitmentNotFound = 68,
+    CommitmentNotPending = 69,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -134,7 +143,7 @@ impl ZkLocationVerifier {
 
         let key = Self::verif_key(&env, &commitment);
         if env.storage().persistent().has(&key) {
-            panic_with_error!(&env, HarvestaError::CommitmentAlreadySubmitted);
+            panic_with_error!(&env, ZkLocationError::CommitmentAlreadySubmitted);
         }
 
         let record = LocationVerification {
@@ -189,10 +198,10 @@ impl ZkLocationVerifier {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::CommitmentNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, ZkLocationError::CommitmentNotFound));
 
         if record.status != VerificationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::CommitmentNotPending);
+            panic_with_error!(&env, ZkLocationError::CommitmentNotPending);
         }
 
         record.status = VerificationStatus::Approved;
@@ -240,10 +249,10 @@ impl ZkLocationVerifier {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::CommitmentNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, ZkLocationError::CommitmentNotFound));
 
         if record.status != VerificationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::CommitmentNotPending);
+            panic_with_error!(&env, ZkLocationError::CommitmentNotPending);
         }
 
         record.status = VerificationStatus::Rejected;
@@ -332,7 +341,7 @@ impl ZkLocationVerifier {
     /// coordinate-level boundary.
     fn assert_northern_nigeria(env: &Env, region_index: u32) {
         if region_index > 8 {
-            panic_with_error!(env, HarvestaError::OutsideNigeriaRegion);
+            panic_with_error!(env, ZkLocationError::OutsideNigeriaRegion);
         }
     }
 }
@@ -407,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #120)")]
+    #[should_panic(expected = "Error(Contract, #67)")]
     fn test_duplicate_commitment_rejected() {
         let (env, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -448,7 +457,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #122)")]
+    #[should_panic(expected = "Error(Contract, #69)")]
     fn test_cache_miss_with_different_proof_digest_falls_through() {
         // A different proof_digest for the same commitment is a cache miss
         // and falls through to the pre-existing "not Pending" panic — proving
@@ -496,7 +505,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #122)")]
+    #[should_panic(expected = "Error(Contract, #69)")]
     fn test_proof_cache_disabled_when_ttl_zero() {
         // With TTL=0 the cache is bypassed; replay falls through to the
         // pre-existing "not Pending" panic.

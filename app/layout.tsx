@@ -2,12 +2,13 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Header } from '@/components/organisms/Header/Header';
 import { Footer } from '@/components/organisms/Footer/Footer';
-import { QueryProvider } from '@/components/providers/QueryProvider';
-import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrapper';
-import { FavoritesProvider } from '@/contexts/FavouritesContext';
 import { CookieBanner } from '@/components/CookieBanner';
 import { ToastProvider } from '@/contexts/ToastContext';
-import { ToastProvider as LegacyToastProvider } from '@/components/providers/ToastProvider';
+import { ToastContainer } from '@/components/ui/toast';
+import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrapper';
+import { FavoritesProvider } from '@/contexts/FavouritesContext';
+import { QueryProvider } from '@/components/providers/QueryProvider';
+import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
 const siteName = 'FarmCredit';
@@ -15,8 +16,23 @@ const siteDescription = 'FarmCredit - Decentralized agricultural credit on Stell
 const ogImage = '/icons/icon-512x512.png';
 
 export const metadata: Metadata = {
-  title: 'FarmCredit',
-  description: 'Decentralized agricultural credit on Stellar',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: siteName,
+    template: `%s | ${siteName}`,
+  },
+  description: siteDescription,
+  applicationName: siteName,
+  keywords: [
+    'Stellar',
+    'FarmCredit',
+    'agriculture',
+    'decentralized finance',
+    'DeFi',
+    'credit',
+    'farming',
+    'blockchain',
+  ],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -117,17 +133,13 @@ export default function RootLayout({
           <WalletProviderWrapper>
             <FavoritesProvider>
               <ToastProvider>
-                {/* LegacyToastProvider wraps the older `components/providers/ToastProvider`
-                    which is consumed by `@/hooks/useToast` and `SocialShareButtons`.
-                    The newer `contexts/ToastContext` above handles modern toasts. */}
-                <LegacyToastProvider>
-                  <CookieBanner />
-                  <Header />
-                  <main id="main" tabIndex={-1}>
-                    {children}
-                  </main>
-                  <Footer />
-                </LegacyToastProvider>
+                <ToastContainer />
+                <CookieBanner />
+                <Header />
+                <main id="main" tabIndex={-1}>
+                  {children}
+                </main>
+                <Footer />
               </ToastProvider>
             </FavoritesProvider>
           </WalletProviderWrapper>

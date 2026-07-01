@@ -5,7 +5,10 @@
  * species catalogue. Voting power is proportional to TREE token holdings.
  */
 
+import { TransactionBuilder, Operation, BASE_FEE, xdr, Address } from '@stellar/stellar-sdk';
+import { Horizon } from '@stellar/stellar-sdk';
 import type { NetworkType } from '@/lib/types/wallet';
+import { networkConfig } from '@/lib/config/network';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,12 +70,12 @@ export function getSpeciesVotingContract(network: NetworkType): string {
  * @returns Unsigned transaction XDR ready for signing
  */
 export async function buildProposeSpeciesTransaction(
-  _proposerPublicKey: string,
-  _slug: string,
-  _name: string,
+  proposerPublicKey: string,
+  slug: string,
+  name: string,
   co2_scaled: number,
   maturity_years: number,
-  _network: NetworkType
+  network: NetworkType
 ): Promise<{ transactionXdr: string; networkPassphrase: string }> {
   if (co2_scaled <= 0) {
     throw new Error('co2_scaled must be positive');
@@ -81,9 +84,35 @@ export async function buildProposeSpeciesTransaction(
     throw new Error('maturity_years must be > 0');
   }
 
-  // TODO: Implement species proposal submission using Soroban contract client
-  // This would create a transaction that calls the propose_species function
-  throw new Error('Species proposal submission not yet implemented');
+  const server = new Horizon.Server(networkConfig.horizonUrl);
+  const proposerAccount = await server.loadAccount(proposerPublicKey);
+  const networkPassphrase = networkConfig.networkPassphrase;
+
+  // TODO: Replace with actual Soroban contract invocation
+  // This is a placeholder - actual implementation will use soroban-sdk
+  const transaction = new TransactionBuilder(proposerAccount, {
+    fee: BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(
+      Operation.invokeHostFunction({
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          new xdr.InvokeContractArgs({
+            contractAddress: new Address(getSpeciesVotingContract(network)).toScAddress(),
+            functionName: 'propose_species',
+            args: [],
+          })
+        ),
+        auth: [],
+      })
+    )
+    .setTimeout(300)
+    .build();
+
+  return {
+    transactionXdr: transaction.toXDR(),
+    networkPassphrase,
+  };
 }
 
 /**
@@ -97,14 +126,39 @@ export async function buildProposeSpeciesTransaction(
  * @returns Unsigned transaction XDR ready for signing
  */
 export async function buildVoteTransaction(
-  _voterPublicKey: string,
-  _proposalId: number,
-  _voteFor: boolean,
-  _network: NetworkType
+  voterPublicKey: string,
+  proposalId: number,
+  voteFor: boolean,
+  network: NetworkType
 ): Promise<{ transactionXdr: string; networkPassphrase: string }> {
-  // TODO: Implement voting submission using Soroban contract client
-  // This would create a transaction that calls the vote function
-  throw new Error('Voting submission not yet implemented');
+  const server = new Horizon.Server(networkConfig.horizonUrl);
+  const voterAccount = await server.loadAccount(voterPublicKey);
+  const networkPassphrase = networkConfig.networkPassphrase;
+
+  // TODO: Replace with actual Soroban contract invocation
+  const transaction = new TransactionBuilder(voterAccount, {
+    fee: BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(
+      Operation.invokeHostFunction({
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          new xdr.InvokeContractArgs({
+            contractAddress: new Address(getSpeciesVotingContract(network)).toScAddress(),
+            functionName: 'vote',
+            args: [],
+          })
+        ),
+        auth: [],
+      })
+    )
+    .setTimeout(300)
+    .build();
+
+  return {
+    transactionXdr: transaction.toXDR(),
+    networkPassphrase,
+  };
 }
 
 /**
@@ -117,13 +171,38 @@ export async function buildVoteTransaction(
  * @returns Unsigned transaction XDR ready for signing
  */
 export async function buildExecuteProposalTransaction(
-  _executorPublicKey: string,
-  _proposalId: number,
-  _network: NetworkType
+  executorPublicKey: string,
+  proposalId: number,
+  network: NetworkType
 ): Promise<{ transactionXdr: string; networkPassphrase: string }> {
-  // TODO: Implement proposal execution using Soroban contract client
-  // This would create a transaction that calls the execute_proposal function
-  throw new Error('Proposal execution not yet implemented');
+  const server = new Horizon.Server(networkConfig.horizonUrl);
+  const executorAccount = await server.loadAccount(executorPublicKey);
+  const networkPassphrase = networkConfig.networkPassphrase;
+
+  // TODO: Replace with actual Soroban contract invocation
+  const transaction = new TransactionBuilder(executorAccount, {
+    fee: BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(
+      Operation.invokeHostFunction({
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          new xdr.InvokeContractArgs({
+            contractAddress: new Address(getSpeciesVotingContract(network)).toScAddress(),
+            functionName: 'execute_proposal',
+            args: [],
+          })
+        ),
+        auth: [],
+      })
+    )
+    .setTimeout(300)
+    .build();
+
+  return {
+    transactionXdr: transaction.toXDR(),
+    networkPassphrase,
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

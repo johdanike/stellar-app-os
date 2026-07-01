@@ -19,6 +19,7 @@ import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal
 import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
 import { useToast } from '@/hooks/useToast';
 import { useAppTranslation } from '@/hooks/useTranslation';
+import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
 
 export default function HomePage(): JSX.Element {
   const [showTx, setShowTx] = useState(false);
