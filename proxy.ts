@@ -13,7 +13,7 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   const ip = getClientIp(request);
   const { pathname } = request.nextUrl;
 

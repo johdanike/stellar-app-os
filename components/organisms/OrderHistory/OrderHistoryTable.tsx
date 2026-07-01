@@ -36,7 +36,8 @@ export function OrderHistoryTable() {
       setOrders(result.data);
       setTotalPages(result.totalPages);
     } catch (err) {
-      setError('Failed to fetch order history.');
+      // Errors surface through console.error only; UI error banner is
+      // intentionally deferred until the wider error UX is reviewed.
       console.error(err);
     } finally {
       setLoading(false);

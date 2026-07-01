@@ -16,6 +16,29 @@ import {
 import { cn } from '@/lib/utils';
 import { hasCompletedOnboardingTour, requestOnboardingTourRestart } from '@/lib/onboardingTour';
 import { PreferencesSection } from '@/components/organisms/settings/PreferencesSection';
+import { cn } from '@/lib/utils';
+
+type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
+
+interface NavItem {
+  id: TabId;
+  label: string;
+  icon?: string;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'preferences', label: 'Preferences' },
+  { id: 'danger', label: 'Delete Account' },
+];
+
+const SECTION_TITLES: Record<TabId, string> = {
+  profile: 'Profile',
+  notifications: 'Notifications',
+  preferences: 'Preferences',
+  danger: 'Delete Account',
+};
 
 type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
 
@@ -119,8 +142,6 @@ export default function SettingsPage(): ReactNode {
                       )}
                     />
                     <span className="hidden sm:inline">{item.label}</span>
-
-                    <span className="sm:hidden">{item.icon}</span>
                   </button>
                 ))}
               </nav>

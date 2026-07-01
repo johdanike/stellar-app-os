@@ -90,7 +90,10 @@ export function CarbonChart({ data }: CarbonChartProps) {
                   border: 'none',
                   boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                 }}
-                formatter={(value: number) => [`${value} kg`, 'Total Offset']}
+                formatter={(value) => {
+                  if (value === undefined || value === null) return ['— kg', 'Total Offset'];
+                  return [`${value} kg`, 'Total Offset'];
+                }}
               />
               <Area
                 type="monotone"

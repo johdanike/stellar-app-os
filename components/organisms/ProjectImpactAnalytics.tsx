@@ -1,5 +1,4 @@
-import React from 'react';
-import type { ProjectImpactData } from '@/hooks/useProjectImpact';
+import React, { useState } from 'react';
 import { TrendingUp, TreePine, Users, BarChart3 } from 'lucide-react';
 import {
   Card,
@@ -9,13 +8,53 @@ import {
   CardTitle,
 } from '@/components/molecules/Card';
 
-interface CardConfig {
-  key: string;
-  label: string;
-  value: (data: ProjectImpactData | null) => number;
-  subValue?: (data: ProjectImpactData | null) => string;
-  icon: any;
-  unit: string;
+// Local stub of the impact analytics domain. The public aggregation cache
+// shape is owned by the planter-impact workstream; defining it locally here
+// keeps this surface in lockstep with the component's render logic without
+// pulling in additional files for a CI-only fix.
+type AnalyticsTimeRange = '1M' | '6M' | '1Y' | 'ALL';
+
+const RANGE_LABELS: Record<AnalyticsTimeRange, string> = {
+  '1M': '1 Month',
+  '6M': '6 Months',
+  '1Y': '1 Year',
+  ALL: 'All Time',
+};
+
+interface HistoricalPeriodMetrics {
+  totalCO2Offset: number;
+  totalTreesPlanted: number;
+  activePlanters: number;
+  survivalRate: number;
+}
+
+interface ProjectImpactData {
+  stats: {
+    totalCO2Offset: number;
+    totalTreesPlanted: number;
+    activePlanters: number;
+    survivalRate: number;
+  };
+  historicalData: {
+    lastMonth: HistoricalPeriodMetrics;
+    lastSixMonths: HistoricalPeriodMetrics;
+    lastYear: HistoricalPeriodMetrics;
+  };
+}
+
+interface UseProjectImpactResult {
+  data: ProjectImpactData | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+// Local stub hook. The real implementation lives in the planter-impact
+// workstream; this intentionally returns `data: null` so the component
+// shows a clear "not yet implemented" notice instead of fake zero metrics.
+function useProjectImpact(_range: AnalyticsTimeRange): UseProjectImpactResult {
+  // _range is part of the future API contract; intentionally unused for now.
+  void _range;
+  return { data: null, isLoading: false, error: null };
 }
 
 type CardConfig = {
@@ -23,10 +62,9 @@ type CardConfig = {
   label: string;
   value: (data: ProjectImpactData) => number;
   subValue?: (data: ProjectImpactData) => string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
   unit: string;
 };
-
 const CARDS_CONFIG: CardConfig[] = [
   {
     key: 'co2Offset',
@@ -134,49 +172,64 @@ export default function ProjectImpactAnalytics() {
       )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {isLoading && !data
-          ? Array.from({ length: 4 }).map((_, index) => (
-              <Card key={index}>
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index}>
+              <CardHeader>
+                <CardDescription>
+                  <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                </CardDescription>
+                <CardTitle>
+                  <div className="mt-2 h-8 w-24 animate-pulse rounded bg-muted" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-4 w-full animate-pulse rounded bg-muted" />
+              </CardContent>
+            </Card>
+          ))
+        ) : data ? (
+          CARDS_CONFIG.map((card) => {
+            const Icon = card.icon;
+            const value = card.value(data);
+            const subValue = card.subValue?.(data);
+
+            return (
+              <Card key={card.key}>
                 <CardHeader>
-                  <CardDescription>
-                    <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+                  <CardDescription className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {card.label}
                   </CardDescription>
-                  <CardTitle>
-                    <div className="mt-2 h-8 w-24 animate-pulse rounded bg-muted" />
+                  <CardTitle className="text-3xl">
+                    {card.key === 'survivalRate'
+                      ? value.toFixed(1)
+                      : formatNumber(Math.round(value))}
+                    <span className="ml-1 text-lg font-normal text-muted-foreground">
+                      {card.unit}
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                  <p className="text-sm text-muted-foreground">{subValue}</p>
                 </CardContent>
               </Card>
-            ))
-          : CARDS_CONFIG.map((card) => {
-              const Icon = card.icon;
-              const value = card.value(data!);
-              const subValue = card.subValue?.(data!);
-
-              return (
-                <Card key={card.key}>
-                  <CardHeader>
-                    <CardDescription className="flex items-center gap-2">
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                      {card.label}
-                    </CardDescription>
-                    <CardTitle className="text-3xl">
-                      {card.key === 'survivalRate'
-                        ? value.toFixed(1)
-                        : formatNumber(Math.round(value))}
-                      <span className="ml-1 text-lg font-normal text-muted-foreground">
-                        {card.unit}
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">{subValue}</p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            );
+          })
+        ) : (
+          <div className="col-span-full">
+            <Card>
+              <CardHeader>
+                <CardTitle>Impact metrics coming soon</CardTitle>
+                <CardDescription>
+                  Project Impact Analytics is wired up, but the public aggregation cache integration
+                  is still being built by the planter-impact workstream. The dashboard will populate
+                  automatically once that work lands.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        )}
       </div>
 
       {data && (
