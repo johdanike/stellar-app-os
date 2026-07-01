@@ -301,7 +301,10 @@ export function FarmerVerificationPortal() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <form
+        onSubmit={handleSubmit}
+        className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]"
+      >
         <Card className="rounded-lg shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
@@ -360,12 +363,16 @@ export function FarmerVerificationPortal() {
             </label>
 
             {photoLacksCoordinates && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800" role="alert">
+              <div
+                className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800"
+                role="alert"
+              >
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                 <div>
                   <p className="text-sm font-semibold">Warning: Missing Location Coordinates</p>
                   <p className="mt-1 text-xs text-amber-700 leading-relaxed">
-                    This photo does not contain GPS coordinate metadata. Please use a photo taken with GPS location enabled on your device.
+                    This photo does not contain GPS coordinate metadata. Please use a photo taken
+                    with GPS location enabled on your device.
                   </p>
                 </div>
               </div>

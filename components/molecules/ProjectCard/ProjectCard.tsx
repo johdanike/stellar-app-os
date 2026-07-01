@@ -7,7 +7,9 @@ import { toast } from 'sonner';
 import { useFavorites } from '@/contexts/FavouritesContext';
 import type { CarbonProject } from '@/lib/types/carbon';
 
-export function ProjectCard({ project }: { project: CarbonProject }) {
+export type ProjectCardProps = { project: CarbonProject };
+
+export function ProjectCard({ project }: ProjectCardProps) {
   const { isFavorited, toggleFavorite, undoRemove } = useFavorites();
 
   const handleToggle = (projectId: string) => {
