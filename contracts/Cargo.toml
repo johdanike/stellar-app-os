@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "contract-utils",
+    "shared",
+    "planter-registry",
+    "planter-blacklist",
     "escrow",
     "nullifier-registry",
     "escrow-milestone",
@@ -21,7 +24,9 @@ members = [
     "platform-governance",
     "subscription-sponsorship",
     "planter-registry",
+    "nft-certificate",
     "sponsor-receipt",
+    "carbon-marketplace",
     "tree-registry",
 ]
 resolver = "2"

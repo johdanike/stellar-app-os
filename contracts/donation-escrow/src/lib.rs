@@ -1,10 +1,25 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Env,
-    IntoVal, Vec,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, token,
+    Address, Env, IntoVal, Vec,
 };
 use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum DonationError {
+    UnsupportedToken = 71,
+    AlreadyProcessed = 72,
+    AmountPerIntervalMustBePos = 73,
+    DonationCancelled = 74,
+    IntervalNotElapsed = 75,
+    IntervalSecondsMustBePos = 76,
+    RecurringDonationNotFound = 77,
+    ProjectNotRegistered = 78,
+    NotDonor = 79,
+    DonationAlreadyCancelled = 82,
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -96,7 +111,7 @@ impl DonationEscrow {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
 
         if token != xlm && token != usdc {
-            panic_with_error!(&env, HarvestaError::UnsupportedToken);
+            panic_with_error!(&env, DonationError::UnsupportedToken);
         }
         contract_utils::assert_whitelisted(&env, &token);
 
@@ -175,7 +190,7 @@ impl DonationEscrow {
                 .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
             if rec.status != DonationStatus::Pending {
-                panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+                panic_with_error!(&env, DonationError::AlreadyProcessed);
             }
 
             token::Client::new(&env, &rec.token).transfer(
@@ -206,7 +221,7 @@ impl DonationEscrow {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if rec.status != DonationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+            panic_with_error!(&env, DonationError::AlreadyProcessed);
         }
 
         token::Client::new(&env, &rec.token).transfer(
@@ -256,10 +271,10 @@ impl DonationEscrow {
         donor.require_auth();
 
         if amount_per_interval <= 0 {
-            panic_with_error!(&env, HarvestaError::AmountPerIntervalMustBePos);
+            panic_with_error!(&env, DonationError::AmountPerIntervalMustBePos);
         }
         if interval_seconds == 0 {
-            panic_with_error!(&env, HarvestaError::IntervalSecondsMustBePos);
+            panic_with_error!(&env, DonationError::IntervalSecondsMustBePos);
         }
 
         let (xlm, usdc): (Address, Address) = env
@@ -269,7 +284,7 @@ impl DonationEscrow {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
 
         if token != xlm && token != usdc {
-            panic_with_error!(&env, HarvestaError::UnsupportedToken);
+            panic_with_error!(&env, DonationError::UnsupportedToken);
         }
         contract_utils::assert_whitelisted(&env, &token);
 
@@ -316,21 +331,21 @@ impl DonationEscrow {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::RecurringDonationNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationError::RecurringDonationNotFound));
 
         if rec.cancelled {
-            panic_with_error!(&env, HarvestaError::DonationCancelled);
+            panic_with_error!(&env, DonationError::DonationCancelled);
         }
 
         if env.ledger().timestamp() < rec.next_release {
-            panic_with_error!(&env, HarvestaError::IntervalNotElapsed);
+            panic_with_error!(&env, DonationError::IntervalNotElapsed);
         }
 
         let project: Address = env
             .storage()
             .instance()
             .get(&Self::project_key(&env, rec.project_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ProjectNotRegistered));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationError::ProjectNotRegistered));
 
         token::Client::new(&env, &rec.token).transfer(
             &env.current_contract_address(),
@@ -364,14 +379,14 @@ impl DonationEscrow {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::RecurringDonationNotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationError::RecurringDonationNotFound));
 
         if rec.donor != donor {
-            panic_with_error!(&env, HarvestaError::NotDonor);
+            panic_with_error!(&env, DonationError::NotDonor);
         }
 
         if rec.cancelled {
-            panic_with_error!(&env, HarvestaError::DonationAlreadyCancelled);
+            panic_with_error!(&env, DonationError::DonationAlreadyCancelled);
         }
 
         rec.cancelled = true;

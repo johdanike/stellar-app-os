@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/atoms/Checkbox';
 import { Input } from '@/components/atoms/Input';
 import { Select } from '@/components/atoms/Select';
 import { Text } from '@/components/atoms/Text';
+import { useToast } from '@/contexts/ToastContext';
 import {
   Card,
   CardContent,
@@ -60,6 +61,7 @@ interface AdminProjectDetailViewProps {
 }
 
 export function AdminProjectDetailView({ initialProject }: AdminProjectDetailViewProps): ReactNode {
+  const { toast } = useToast();
   const [project, setProject] = useState<AdminProjectDetail>(initialProject);
   const [formValues, setFormValues] = useState<AdminProjectFormValues>(() =>
     toFormValues(initialProject)
@@ -84,8 +86,8 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
   function handleSave(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     startSavingTransition(() => {
-      setProject((current) => {
-        const updated = applyFormValues(current, formValues);
+      const updated = applyFormValues(project, formValues);
+      setProject(() => {
         const withAudit = {
           ...updated,
           lastUpdatedAt: new Date().toISOString(),
@@ -102,6 +104,16 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
         setFormValues(toFormValues(withAudit));
         return withAudit;
       });
+
+      if (updated.verificationEnabled && !project.verificationEnabled) {
+        toast.contract(
+          'Verification Complete',
+          `Project "${updated.name}" has been successfully verified on the blockchain.`
+        );
+      } else {
+        toast.success('Project Saved', `Successfully updated details for "${updated.name}".`);
+      }
+
       setStatusMessage('Project details saved successfully.');
     });
   }
@@ -127,6 +139,18 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
     setStatusMessage(
       nextChecked ? 'Verification status enabled.' : 'Verification status disabled.'
     );
+
+    if (nextChecked) {
+      toast.contract(
+        'Verification Complete',
+        `Project "${project.name}" has been successfully verified on the blockchain.`
+      );
+    } else {
+      toast.info(
+        'Verification Disabled',
+        `Verification has been disabled for project "${project.name}".`
+      );
+    }
   }
 
   function handleMrvUpload(event: ChangeEvent<HTMLInputElement>): void {
