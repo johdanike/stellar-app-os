@@ -3,19 +3,41 @@ import Script from 'next/script';
 import { Header } from '@/components/organisms/Header/Header';
 import { Footer } from '@/components/organisms/Footer/Footer';
 import { CookieBanner } from '@/components/CookieBanner';
-import { ToastProvider } from '@/components/providers/ToastProvider';
+import { ToastProvider } from '@/contexts/ToastContext';
+import { ToastContainer } from '@/components/ui/toast';
 import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrapper';
 import { FavoritesProvider } from '@/contexts/FavouritesContext';
+import { QueryProvider } from '@/components/providers/QueryProvider';
 import './globals.css';
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
+const siteName = 'FarmCredit';
+const siteDescription = 'FarmCredit - Decentralized agricultural credit on Stellar';
+const ogImage = '/icons/icon-512x512.png';
+
 export const metadata: Metadata = {
-  title: 'FarmCredit',
-  description: 'FarmCredit - Decentralized agricultural credit on Stellar',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: siteName,
+    template: `%s | ${siteName}`,
+  },
+  description: siteDescription,
+  applicationName: siteName,
+  keywords: [
+    'Stellar',
+    'FarmCredit',
+    'agriculture',
+    'decentralized finance',
+    'DeFi',
+    'credit',
+    'farming',
+    'blockchain',
+  ],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'FarmCredit',
+    title: siteName,
   },
   formatDetection: {
     telephone: false,
@@ -29,6 +51,33 @@ export const metadata: Metadata = {
       { url: '/icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
       { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
     ],
+    shortcut: '/icon-source.svg',
+  },
+  openGraph: {
+    type: 'website',
+    siteName,
+    title: siteName,
+    description: siteDescription,
+    url: siteUrl,
+    locale: 'en_US',
+    images: [
+      {
+        url: ogImage,
+        width: 512,
+        height: 512,
+        alt: `${siteName} - Decentralized agricultural credit on Stellar`,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: siteName,
+    description: siteDescription,
+    images: [ogImage],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 
@@ -39,8 +88,6 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
 };
-
-import { QueryProvider } from '@/components/providers/QueryProvider';
 
 export default function RootLayout({
   children,
@@ -63,8 +110,11 @@ export default function RootLayout({
               try {
                 var stored = localStorage.getItem('theme');
                 var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                var theme = stored === 'light' || stored === 'dark' ? stored : (prefersDark ? 'dark' : 'light');
-                document.documentElement.classList.toggle('dark', theme === 'dark');
+                var resolved = stored === 'light' ? 'light' : stored === 'dark' ? 'dark' : (prefersDark ? 'dark' : 'light');
+                document.documentElement.classList.toggle('dark', resolved === 'dark');
+                if (stored === 'light' || stored === 'dark' || stored === 'system') {
+                  document.documentElement.dataset.theme = stored;
+                }
                 document.documentElement.classList.add('no-transitions');
                 window.addEventListener('load', function() {
                   document.documentElement.classList.remove('no-transitions');
@@ -73,13 +123,22 @@ export default function RootLayout({
             })();
           `}
         </Script>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Skip to content
+        </a>
         <QueryProvider>
           <WalletProviderWrapper>
             <FavoritesProvider>
               <ToastProvider>
+                <ToastContainer />
                 <CookieBanner />
                 <Header />
-                {children}
+                <main id="main" tabIndex={-1}>
+                  {children}
+                </main>
                 <Footer />
               </ToastProvider>
             </FavoritesProvider>
