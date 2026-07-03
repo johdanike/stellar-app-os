@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { useWalletContext } from '@/components/contexts/WalletContext';
+import { useWalletContext } from '@/contexts/WalletContext';
 import {
   ProposalStatus,
   formatVotingTimeRemaining,

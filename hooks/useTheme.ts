@@ -1,6 +1,4 @@
 'use client';
-
-'use client';
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   applyThemeToDocument,
@@ -57,5 +55,4 @@ export function useTheme() {
     toggle,
     isDark: resolvedTheme === 'dark',
   };
->>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 }
