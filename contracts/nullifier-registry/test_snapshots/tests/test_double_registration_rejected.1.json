@@ -436,43 +436,22 @@
           "v0": {
             "topics": [
               {
-                "symbol": "log"
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 60
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "caught panic 'commitment already registered: double-counting rejected' from contract function 'Symbol(register)'"
+                  "string": "failing with contract error"
                 },
                 {
-                  "map": [
-                    {
-                      "key": {
-                        "symbol": "farmer_id"
-                      },
-                      "val": {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "gps"
-                      },
-                      "val": {
-                        "string": "-1.2345,36.8219"
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "timestamp"
-                      },
-                      "val": {
-                        "u64": 1700000000
-                      }
-                    }
-                  ]
-                },
-                "void"
+                  "u32": 60
+                }
               ]
             }
           }
@@ -493,7 +472,32 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 60
+                }
+              }
+            ],
+            "data": {
+              "string": "escalating error to panic"
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "contract": 60
                 }
               }
             ],
@@ -518,7 +522,7 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 60
                 }
               }
             ],
@@ -583,7 +587,7 @@
               },
               {
                 "error": {
-                  "wasm_vm": "invalid_action"
+                  "contract": 60
                 }
               }
             ],

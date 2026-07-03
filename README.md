@@ -1,6 +1,8 @@
 # 🌱 Harvesta — Plant Trees. Track Impact. Offset Carbon.
 
 > A decentralised tree-planting platform on Stellar where anyone can pay farmers and individuals to plant trees — anonymously or with full carbon-offset tracking — and planters upload real-world progress with a unique tree ID.
+> 
+> *Proudly supported by [Fundable Finance](https://fundable.finance).*
 
 ---
 

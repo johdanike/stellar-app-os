@@ -1,3 +1,14 @@
+import type { GiftDetails } from '@/lib/types/gift';
+import { DEFAULT_GIFT_DETAILS } from '@/lib/types/gift';
+
+// Re-export GiftDetails for convenience
+export type { GiftDetails };
+
+export interface RegionAllocation {
+  regionId: string;
+  treeCount: number;
+}
+
 export interface DonorInfo {
   email: string;
   name: string;
@@ -10,6 +21,8 @@ export interface DonationFlowState {
   treeCount: number;
   isMonthly: boolean;
   donorInfo: DonorInfo;
+  regionAllocations: RegionAllocation[];
+  gift: GiftDetails;
 }
 
 export const DEFAULT_DONOR_INFO: DonorInfo = {
@@ -24,4 +37,6 @@ export const DEFAULT_DONATION_FLOW_STATE: DonationFlowState = {
   treeCount: 1,
   isMonthly: false,
   donorInfo: { ...DEFAULT_DONOR_INFO },
+  regionAllocations: [],
+  gift: { ...DEFAULT_GIFT_DETAILS },
 };
