@@ -1,22 +1,37 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
+import Script from 'next/script';
+import { Header } from '@/components/organisms/Header/Header';
 import { Footer } from '@/components/organisms/Footer/Footer';
 import { WalletProvider } from '@/contexts/WalletContext';
 
-const inter = Inter({
-  variable: '--font-inter',
-  subsets: ['latin'],
-});
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
+const siteName = 'FarmCredit';
+const siteDescription = 'FarmCredit - Decentralized agricultural credit on Stellar';
+const ogImage = '/icons/icon-512x512.png';
 
 export const metadata: Metadata = {
-  title: 'FarmCredit',
-  description: 'FarmCredit - Decentralized agricultural credit on Stellar',
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: siteName,
+    template: `%s | ${siteName}`,
+  },
+  description: siteDescription,
+  applicationName: siteName,
+  keywords: [
+    'Stellar',
+    'FarmCredit',
+    'agriculture',
+    'decentralized finance',
+    'DeFi',
+    'credit',
+    'farming',
+    'blockchain',
+  ],
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'FarmCredit',
+    title: siteName,
   },
   formatDetection: {
     telephone: false,
@@ -30,6 +45,33 @@ export const metadata: Metadata = {
       { url: '/icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
       { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
     ],
+    shortcut: '/icon-source.svg',
+  },
+  openGraph: {
+    type: 'website',
+    siteName,
+    title: siteName,
+    description: siteDescription,
+    url: siteUrl,
+    locale: 'en_US',
+    images: [
+      {
+        url: ogImage,
+        width: 512,
+        height: 512,
+        alt: `${siteName} - Decentralized agricultural credit on Stellar`,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: siteName,
+    description: siteDescription,
+    images: [ogImage],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 
@@ -47,7 +89,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

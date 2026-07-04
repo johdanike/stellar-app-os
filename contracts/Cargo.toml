@@ -1,0 +1,38 @@
+[workspace]
+members = [
+    "contract-utils",
+    "shared",
+    "planter-registry",
+    "planter-blacklist",
+    "escrow",
+    "nullifier-registry",
+    "escrow-milestone",
+    "tree-escrow",
+    "farmer-registry",
+    "donation-escrow",
+    "zk-location-verifier",
+    "location-proof",
+    "naira-payout",
+    "aggregate-impact-verifier",
+    "tree-token",
+    "admin-controls",
+    "carbon-credits",
+    "kyc-attestation",
+    "species-registry",
+    "species-voting",
+    "treasury",
+    "platform-governance",
+    "subscription-sponsorship",
+    "planter-registry",
+    "nft-certificate",
+    "sponsor-receipt",
+    "carbon-marketplace",
+    "tree-registry",
+]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletContext } from '@/contexts/WalletContext';
 import { fetchLeaderboard, getMockUserStats } from '@/lib/api/mock/leaderboard';
-import { LeaderboardSponsor, LeaderboardPeriod } from '@/lib/types/leaderboard';
+import { type LeaderboardSponsor, type LeaderboardPeriod } from '@/lib/types/leaderboard';
 import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
 import {
@@ -41,7 +41,7 @@ function formatAddress(address: string) {
 
 export default function LeaderboardPage() {
   const { wallet } = useWalletContext() || { wallet: null };
-  const isConnected = !!wallet?.isConnected;
+  const _isConnected = !!wallet?.isConnected;
   const [period, setPeriod] = useState<LeaderboardPeriod>('monthly');
   const [sponsors, setSponsors] = useState<LeaderboardSponsor[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,7 +67,7 @@ export default function LeaderboardPage() {
   // User details
   const userAddress = wallet?.publicKey || '';
   const userStats = userAddress ? getMockUserStats(userAddress, period) : null;
-  const isUserInTop10 = userStats
+  const _isUserInTop10 = userStats
     ? sponsors.some((s) => s.address.toLowerCase() === userAddress.toLowerCase())
     : false;
 

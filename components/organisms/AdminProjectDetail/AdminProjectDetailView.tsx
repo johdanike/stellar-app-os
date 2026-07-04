@@ -84,8 +84,8 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
   function handleSave(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     startSavingTransition(() => {
-      setProject((current) => {
-        const updated = applyFormValues(current, formValues);
+      const updated = applyFormValues(project, formValues);
+      setProject(() => {
         const withAudit = {
           ...updated,
           lastUpdatedAt: new Date().toISOString(),
@@ -127,6 +127,18 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
     setStatusMessage(
       nextChecked ? 'Verification status enabled.' : 'Verification status disabled.'
     );
+
+    if (nextChecked) {
+      toast.contract(
+        'Verification Complete',
+        `Project "${project.name}" has been successfully verified on the blockchain.`
+      );
+    } else {
+      toast.info(
+        'Verification Disabled',
+        `Verification has been disabled for project "${project.name}".`
+      );
+    }
   }
 
   function handleMrvUpload(event: ChangeEvent<HTMLInputElement>): void {

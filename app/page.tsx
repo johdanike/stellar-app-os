@@ -1,8 +1,13 @@
+'use client';
+
+import { type JSX, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
-import { Badge } from '@/components/atoms/Badge';
 import { Counter } from '@/components/atoms/Counter';
+import { OnboardingTour } from '@/components/organisms/OnboardingTour/OnboardingTour';
+import { LandingHero } from '@/components/organisms/LandingHero';
+import SocialShareButtons from '@/components/SocialShareButtons';
 import {
   Card,
   CardHeader,
@@ -10,9 +15,17 @@ import {
   CardDescription,
   CardContent,
 } from '@/components/molecules/Card';
-import { OnboardingTour } from '@/components/organisms/OnboardingTour/OnboardingTour';
+import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal';
+import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
+import { useToast } from '@/hooks/useToast';
+import { useAppTranslation } from '@/hooks/useTranslation';
+import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
 
-export default function Home() {
+export default function HomePage(): JSX.Element {
+  const [showTx, setShowTx] = useState(false);
+  const { addToast } = useToast();
+  const { t } = useAppTranslation();
+
   return (
     <main
       id="main-content"
@@ -24,7 +37,33 @@ export default function Home() {
         <Text variant="muted" className="max-w-md">
           Decentralized agricultural credit platform built on the Stellar network.
         </Text>
+        <Button asChild variant="default" size="sm">
+          <Link href="/api-docs">API Docs</Link>
+        </Button>
+      </header>
+
+      <div data-tour-id="hero-section">
+        <LandingHero />
       </div>
+
+      <CardContent className="flex flex-col gap-3">
+        <Button
+          onClick={() => addToast(t('home.profileSaved'), 'success')}
+          variant="default"
+          size="lg"
+          className="w-full"
+        >
+          {t('home.showToast')}
+        </Button>
+      </CardContent>
+
+      <CardContent className="flex flex-col gap-3">
+        <Button onClick={() => setShowTx(true)} variant="default" size="lg" className="w-full">
+          {t('home.transactions')}
+        </Button>
+      </CardContent>
+
+      <TransactionHistoryModal open={showTx} onClose={() => setShowTx(false)} />
 
       {/* Platform Stats */}
       <div
@@ -34,27 +73,27 @@ export default function Home() {
         <div className="flex flex-col items-center gap-2 p-6 rounded-lg bg-muted/50">
           <Counter end={1234567} prefix="$" className="text-center" />
           <Text variant="muted" className="text-sm">
-            Total Credit Issued
+            {t('home.totalCreditIssued')}
           </Text>
         </div>
         <div className="flex flex-col items-center gap-2 p-6 rounded-lg bg-muted/50">
           <Counter end={5420} className="text-center" />
           <Text variant="muted" className="text-sm">
-            Active Farmers
+            {t('home.activeFarmers')}
           </Text>
         </div>
         <div className="flex flex-col items-center gap-2 p-6 rounded-lg bg-muted/50">
           <Counter end={98} suffix="%" className="text-center" />
           <Text variant="muted" className="text-sm">
-            Repayment Rate
+            {t('home.repaymentRate')}
           </Text>
         </div>
       </div>
 
       <Card data-tour-id="get-started-card" className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Get Started</CardTitle>
-          <CardDescription>Connect your wallet to access farm credit services.</CardDescription>
+          <CardTitle>{t('home.getStarted')}</CardTitle>
+          <CardDescription>{t('home.getStartedDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <Button
@@ -66,7 +105,7 @@ export default function Home() {
             Connect Wallet
           </Button>
           <Button asChild variant="outline" size="lg" className="w-full">
-            <Link href="/blog">Read our Blog</Link>
+            <Link href="/blog">{t('home.readBlog')}</Link>
           </Button>
           <Button
             data-tour-id="purchase-credits-button"
@@ -78,10 +117,34 @@ export default function Home() {
             <Link href="/credits/purchase">Purchase Carbon Credits</Link>
           </Button>
           <Button asChild variant="outline" size="lg" className="w-full">
-            <Link href="/leaderboard">View Leaderboard</Link>
+            <Link href="/api-docs">Explore API Documentation</Link>
+          </Button>
+          <Button
+            data-tour-id="purchase-credits-button"
+            asChild
+            variant="outline"
+            size="lg"
+            className="w-full"
+          >
+            <Link href="/credits/purchase">Purchase Carbon Credits</Link>
           </Button>
         </CardContent>
       </Card>
+
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Share FarmCredit</CardTitle>
+          <CardDescription>Help spread the word about sustainable agriculture.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SocialShareButtons
+            title="Check out FarmCredit!"
+            description="A decentralized agricultural credit platform built on Stellar"
+            impact="Supporting sustainable farming and equal access to credit"
+          />
+        </CardContent>
+      </Card>
+
       <OnboardingTour />
     </main>
   );

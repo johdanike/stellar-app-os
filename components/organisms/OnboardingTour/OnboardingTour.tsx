@@ -50,6 +50,7 @@ export function OnboardingTour(): React.ReactNode {
   useEffect(() => {
     if (consumeOnboardingTourRestartRequest()) {
       setCurrentStepIndex(0);
+
       setIsOpen(true);
       return;
     }
@@ -66,7 +67,9 @@ export function OnboardingTour(): React.ReactNode {
 
     const element = document.querySelector<HTMLElement>(currentStep.target);
     if (!element) {
-      setTargetRect(null);
+      requestAnimationFrame(() => {
+        setTargetRect(null);
+      });
       return;
     }
 

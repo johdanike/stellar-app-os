@@ -8,6 +8,7 @@ import { Text } from '@/components/atoms/Text';
 
 export default function ComparePage() {
   const router = useRouter();
+  const { t } = useAppTranslation();
 
   const handleAddToCart = useCallback(
     (projectId: string) => {
@@ -21,10 +22,10 @@ export default function ComparePage() {
     <main id="main-content" className="container mx-auto px-4 py-8 max-w-7xl">
       <header className="mb-8">
         <Text variant="h2" as="h1" className="mb-2">
-          Compare Carbon Credit Projects
+          {t('purchase.compareTitle')}
         </Text>
         <Text variant="muted" as="p">
-          Select up to 3 projects to compare their features, pricing, and benefits side-by-side
+          {t('purchase.compareSubtitle')}
         </Text>
       </header>
 

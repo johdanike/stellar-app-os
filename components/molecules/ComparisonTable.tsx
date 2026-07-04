@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 export interface ComparisonTableProps {
   projects: CarbonProject[];
-  onAddToCart?: (projectId: string) => void;
+  onAddToCart?: (_projectId: string) => void;
   className?: string;
 }
 
@@ -43,7 +43,7 @@ export function ComparisonTable({ projects, onAddToCart, className }: Comparison
               </Text>
             </th>
             {projects.map((project) => (
-              <th key={project.id} className="text-left p-4 bg-muted/50 min-w-[200px]">
+              <th key={project.id} className="text-left p-4 bg-muted/50 min-w-50">
                 <Text variant="small" as="span" className="font-semibold">
                   {project.name}
                 </Text>

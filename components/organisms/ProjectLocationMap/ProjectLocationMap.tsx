@@ -17,23 +17,31 @@ export interface ProjectLocationMapProps {
 interface LeafletMapInstance {
   remove: () => void;
   invalidateSize: () => void;
+
   setView: (latLng: [number, number], zoom: number) => LeafletMapInstance;
 }
 
 interface LeafletLayer {
   addTo: (map: LeafletMapInstance) => LeafletLayer;
   remove?: () => void;
+
+  bindPopup?: (content: string) => LeafletLayer;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface LeafletTileLayer extends LeafletLayer {}
 
 interface LeafletMarker extends LeafletLayer {
   bindPopup: (content: string) => LeafletMarker;
+
+  addTo: (map: LeafletMapInstance) => LeafletMarker;
 }
 
 interface LeafletGlobal {
   map: (element: HTMLElement, options?: Record<string, unknown>) => LeafletMapInstance;
+
   tileLayer: (urlTemplate: string, options?: Record<string, unknown>) => LeafletTileLayer;
+
   marker: (latLng: [number, number], options?: Record<string, unknown>) => LeafletMarker;
 }
 
@@ -232,7 +240,7 @@ export function ProjectLocationMap({
       satelliteLayerRef.current = null;
       activeLayerRef.current = null;
     };
-  }, [lat, lng, locationLabel, projectName]);
+  }, [lat, lng, locationLabel, projectName, viewMode]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;

@@ -24,33 +24,35 @@ const typeConfig = {
   conservation: { label: 'Conservation', colorClass: 'bg-stellar-purple' },
 };
 
-export function ProjectCard({
-  id,
-  title,
-  location,
-  description,
-  imageUrl,
-  type,
-  progress,
-  price,
-  availableCredits,
-}: ProjectCardProps) {
-  const isSoldOut = availableCredits <= 0;
-  const clampedProgress = Math.min(Math.max(progress, 0), 100);
-  const badgeConfig = typeConfig[type] || typeConfig.reforestation;
+  const handleToggle = (projectId: string) => {
+    const alreadyFavorited = isFavorited(projectId);
 
+    toggleFavorite(projectId);
+
+    toast(
+      alreadyFavorited
+        ? `${project.name} removed from favorites`
+        : `${project.name} added to favorites!`,
+      {
+        action: {
+          label: 'Undo',
+          onClick: () => undoRemove(),
+        },
+      }
+    );
+  };
   return (
-    <Card className="group overflow-hidden flex flex-col h-full transition-all duration-300 hover:shadow-md hover:border-stellar-blue/30">
-      {/* Image Area */}
-      <div className="relative h-48 w-full overflow-hidden bg-muted">
-        {imageUrl ? (
-          <Image
-            src={imageUrl}
-            alt={title}
-            fill
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
+    <div className="rounded-lg border bg-card p-6 space-y-4 hover:shadow-lg transition-shadow">
+      <div className="flex justify-end">
+        <button
+          onClick={() => handleToggle(project.id)}
+          aria-label={isFavorited(project.id) ? 'Remove from favorites' : 'Add to favorites'}
+          aria-pressed={isFavorited(project.id)}
+        >
+          <HeartIcon
+            className={
+              isFavorited(project.id) ? 'fill-red-500 stroke-red-500' : 'fill-none stroke-current'
+            }
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground bg-secondary/50">
@@ -64,13 +66,16 @@ export function ProjectCard({
           <Badge className={`border-none ${badgeConfig.colorClass}`}>{badgeConfig.label}</Badge>
         </div>
       </div>
-
-      <CardHeader className="p-5 pb-3 flex-none">
-        <div className="flex items-center space-x-1 text-muted-foreground mb-1.5">
-          <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-          <Text variant="small" className="truncate text-xs">
-            {location}
+      <div>
+        <div className="flex items-start justify-between mb-2">
+          <Text variant="h4" as="h3" className="font-semibold">
+            {project.name}
           </Text>
+          {project.isOutOfStock && (
+            <Badge variant="outline" className="ml-2">
+              Out of Stock
+            </Badge>
+          )}
         </div>
         <Text
           as="h3"
@@ -85,6 +90,7 @@ export function ProjectCard({
         <Text variant="muted" className="line-clamp-2 mb-4">
           {description}
         </Text>
+      </div>
 
         {/* Progress Area */}
         <div className="space-y-2 mt-auto">
@@ -106,7 +112,23 @@ export function ProjectCard({
             />
           </div>
         </div>
-      </CardContent>
+        <div className="flex items-center justify-between">
+          <Text variant="small" as="span" className="text-muted-foreground">
+            Price per Ton
+          </Text>
+          <Text variant="small" as="span" className="font-semibold">
+            ${project.pricePerTon.toFixed(2)}
+          </Text>
+        </div>
+        <div className="flex items-center justify-between">
+          <Text variant="small" as="span" className="text-muted-foreground">
+            Available
+          </Text>
+          <Text variant="small" as="span">
+            {project.availableSupply.toFixed(2)} tons
+          </Text>
+        </div>
+      </div>
 
       <CardFooter className="p-5 pt-4 border-t bg-muted/20 flex items-center justify-between flex-none gap-3">
         <div className="flex flex-col">
