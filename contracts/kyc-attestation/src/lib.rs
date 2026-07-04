@@ -150,6 +150,11 @@ fn zk_record_key(env: &Env, farmer: &Address) -> soroban_sdk::Val {
     (symbol_short!("ZK_REC"), farmer.clone()).into_val(env)
 }
 
+/// Instance-storage key to track used ZK commitments and prevent reuse.
+fn zk_commitment_key(env: &Env, commitment: &BytesN<32>) -> soroban_sdk::Val {
+    (symbol_short!("ZK_CMT"), commitment.clone()).into_val(env)
+}
+
 // ── Contract ──────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -228,6 +233,16 @@ impl KycAttestation {
         verifier.require_auth();
         Self::require_verifier(&env, &verifier);
 
+        // Check for commitment reuse to prevent a single proof from being used for multiple farmers.
+        // We use age_commitment as the unique identifier for the proof's subject.
+        if env
+            .storage()
+            .instance()
+            .has(&zk_commitment_key(&env, &proof.age_commitment))
+        {
+            panic_with_error!(&env, HarvestaError::CommitmentAlreadySubmitted);
+        }
+
         // 1. Expiry check
         if proof.valid_until <= env.ledger().timestamp() {
             panic_with_error!(&env, HarvestaError::ProofExpired);
@@ -273,6 +288,11 @@ impl KycAttestation {
         env.storage()
             .instance()
             .set(&zk_record_key(&env, &farmer), &record);
+
+        // Mark the commitment as used to prevent replay.
+        env.storage()
+            .instance()
+            .set(&zk_commitment_key(&env, &proof.age_commitment), &());
 
         env.events().publish(
             (symbol_short!("ZKKYCPass"), farmer.clone()),
@@ -403,19 +423,20 @@ mod tests {
 
     /// Build a valid `ZkProofInput` for `region` (e.g. "s1") with a
     /// ledger-timestamp-aware expiry.  The region_commitment is derived from
-    /// SHA-256(region_bytes) so the contract's consistency check passes.
-    fn valid_proof(env: &Env, region: &str, valid_until: u64) -> ZkProofInput {
+    /// SHA-256(region_bytes) so the contract's consistency check passes. The
+    /// nonce allows creating unique commitments for tests.
+    fn valid_proof(env: &Env, region: &str, valid_until: u64, nonce: u8) -> ZkProofInput {
         let region_str = String::from_str(env, region);
         // Derive region_commitment the same way the contract does: SHA-256(raw region bytes)
         let region_bytes = Bytes::from_slice(env, region.as_bytes());
         let region_commitment: BytesN<32> = env.crypto().sha256(&region_bytes).into();
 
-        // Proof digest is arbitrary 32 bytes (represents an off-chain Groth16 artefact)
-        let proof_digest = BytesN::from_array(env, &[0xabu8; 32]);
+        // Proof digest and age commitment are arbitrary 32 bytes for testing.
+        let proof_digest = BytesN::from_array(env, &[nonce; 32]);
 
         ZkProofInput {
             proof_digest,
-            age_commitment: BytesN::from_array(env, &[0x01u8; 32]),
+            age_commitment: BytesN::from_array(env, &[nonce; 32]),
             region_commitment,
             region_plaintext: region_str,
             valid_until,
@@ -431,7 +452,7 @@ mod tests {
 
         // Place ledger at t=1000; proof expires at t=2000
         env.ledger().set_timestamp(1000);
-        let proof = valid_proof(&env, "s1", 2000);
+        let proof = valid_proof(&env, "s1", 2000, 1);
 
         client.verify_kyc(&verifier, &farmer, &proof);
 
@@ -444,7 +465,7 @@ mod tests {
         let farmer = Address::generate(&env);
 
         env.ledger().set_timestamp(500);
-        let proof = valid_proof(&env, "s3", 9999);
+        let proof = valid_proof(&env, "s3", 9999, 1);
 
         client.verify_kyc(&verifier, &farmer, &proof);
 
@@ -453,7 +474,7 @@ mod tests {
         assert_eq!(rec.verifier, verifier);
         assert_eq!(rec.verified_region, String::from_str(&env, "s3"));
         assert_eq!(rec.valid_until, 9999);
-        assert_eq!(rec.age_commitment, BytesN::from_array(&env, &[0x01u8; 32]));
+        assert_eq!(rec.age_commitment, BytesN::from_array(&env, &[1u8; 32]));
     }
 
     #[test]
@@ -463,7 +484,7 @@ mod tests {
         let farmer = Address::generate(&env);
 
         env.ledger().set_timestamp(0);
-        let proof = valid_proof(&env, "s2", 1000);
+        let proof = valid_proof(&env, "s2", 1000, 1);
         let expected_hash: BytesN<32> = env
             .crypto()
             .sha256(&Bytes::from_slice(&env, proof.proof_digest.to_array().as_slice()))
@@ -490,7 +511,7 @@ mod tests {
 
         for region in ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"] {
             let farmer = Address::generate(&env);
-            let proof = valid_proof(&env, region, 9999);
+            let proof = valid_proof(&env, region, 9999, region.as_bytes()[1]);
             client.verify_kyc(&verifier, &farmer, &proof);
             assert_eq!(client.get_zk_kyc_status(&farmer), KycStatus::Verified);
         }
@@ -503,10 +524,10 @@ mod tests {
         let farmer = Address::generate(&env);
 
         env.ledger().set_timestamp(100);
-        client.verify_kyc(&verifier, &farmer, &valid_proof(&env, "s1", 5000));
+        client.verify_kyc(&verifier, &farmer, &valid_proof(&env, "s1", 5000, 1));
 
         env.ledger().set_timestamp(200);
-        client.verify_kyc(&verifier, &farmer, &valid_proof(&env, "s4", 9000));
+        client.verify_kyc(&verifier, &farmer, &valid_proof(&env, "s4", 9000, 2));
 
         let rec = client.get_zk_kyc_record(&farmer).unwrap();
         assert_eq!(rec.verified_region, String::from_str(&env, "s4"));
@@ -516,6 +537,23 @@ mod tests {
     // ── verify_kyc — error paths ──────────────────────────────────────────────
 
     #[test]
+    #[should_panic(expected = "Error(Contract, #67)")]
+    fn test_verify_kyc_rejects_reused_commitment() {
+        let (env, _, verifier, client) = setup();
+        let farmer1 = Address::generate(&env);
+        let farmer2 = Address::generate(&env);
+
+        env.ledger().set_timestamp(100);
+        let proof = valid_proof(&env, "s1", 5000, 1);
+
+        // First use with farmer1 is OK.
+        client.verify_kyc(&verifier, &farmer1, &proof);
+
+        // Reusing the same proof (and thus same commitment) for farmer2 should fail.
+        client.verify_kyc(&verifier, &farmer2, &proof);
+    }
+
+    #[test]
     #[should_panic(expected = "Error(Contract, #61)")]
     fn test_non_verifier_rejected() {
         let (env, _, _, client) = setup();
@@ -523,7 +561,7 @@ mod tests {
         let farmer = Address::generate(&env);
 
         env.ledger().set_timestamp(0);
-        let proof = valid_proof(&env, "s1", 9999);
+        let proof = valid_proof(&env, "s1", 9999, 1);
         client.verify_kyc(&attacker, &farmer, &proof);
     }
 
@@ -535,7 +573,7 @@ mod tests {
 
         // Ledger is at t=2000; proof expired at t=1000
         env.ledger().set_timestamp(2000);
-        let proof = valid_proof(&env, "s1", 1000);
+        let proof = valid_proof(&env, "s1", 1000, 1);
         client.verify_kyc(&verifier, &farmer, &proof);
     }
 
@@ -547,7 +585,7 @@ mod tests {
         let farmer = Address::generate(&env);
 
         env.ledger().set_timestamp(1000);
-        let proof = valid_proof(&env, "s1", 1000); // equal, not greater
+        let proof = valid_proof(&env, "s1", 1000, 1); // equal, not greater
         client.verify_kyc(&verifier, &farmer, &proof);
     }
 
@@ -559,7 +597,7 @@ mod tests {
 
         env.ledger().set_timestamp(0);
         // "e7" is East Africa — outside Northern Nigeria
-        let proof = valid_proof(&env, "e7", 9999);
+        let proof = valid_proof(&env, "e7", 9999, 1);
         client.verify_kyc(&verifier, &farmer, &proof);
     }
 
@@ -665,7 +703,7 @@ mod tests {
         client.attest_kyc(&verifier, &farmer, &KycStatus::Rejected);
 
         env.ledger().set_timestamp(0);
-        client.verify_kyc(&verifier, &farmer, &valid_proof(&env, "s5", 9999));
+        client.verify_kyc(&verifier, &farmer, &valid_proof(&env, "s5", 9999, 1));
 
         // Legacy path: Rejected
         assert_eq!(client.get_kyc_status(&farmer), KycStatus::Rejected);
