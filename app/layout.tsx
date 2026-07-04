@@ -3,13 +3,14 @@ import Script from 'next/script';
 import { Header } from '@/components/organisms/Header/Header';
 import { Footer } from '@/components/organisms/Footer/Footer';
 import { CookieBanner } from '@/components/CookieBanner';
-import { ToastProvider } from '@/components/providers/ToastProvider';
+import { ToastProvider } from '@/contexts/ToastContext';
+import { ToastContainer } from '@/components/ui/toast';
 import { WalletProviderWrapper } from '@/components/providers/WalletProviderWrapper';
 import { FavoritesProvider } from '@/contexts/FavouritesContext';
+import { QueryProvider } from '@/components/providers/QueryProvider';
 import './globals.css';
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://farmcredit.app';
 const siteName = 'FarmCredit';
 const siteDescription = 'FarmCredit - Decentralized agricultural credit on Stellar';
 const ogImage = '/icons/icon-512x512.png';
@@ -88,8 +89,6 @@ export const viewport: Viewport = {
   userScalable: true,
 };
 
-import { QueryProvider } from '@/components/providers/QueryProvider';
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -111,8 +110,11 @@ export default function RootLayout({
               try {
                 var stored = localStorage.getItem('theme');
                 var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                var theme = stored === 'light' || stored === 'dark' ? stored : (prefersDark ? 'dark' : 'light');
-                document.documentElement.classList.toggle('dark', theme === 'dark');
+                var resolved = stored === 'light' ? 'light' : stored === 'dark' ? 'dark' : (prefersDark ? 'dark' : 'light');
+                document.documentElement.classList.toggle('dark', resolved === 'dark');
+                if (stored === 'light' || stored === 'dark' || stored === 'system') {
+                  document.documentElement.dataset.theme = stored;
+                }
                 document.documentElement.classList.add('no-transitions');
                 window.addEventListener('load', function() {
                   document.documentElement.classList.remove('no-transitions');
@@ -131,6 +133,7 @@ export default function RootLayout({
           <WalletProviderWrapper>
             <FavoritesProvider>
               <ToastProvider>
+                <ToastContainer />
                 <CookieBanner />
                 <Header />
                 <main id="main" tabIndex={-1}>
