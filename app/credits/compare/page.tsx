@@ -8,7 +8,7 @@ import { mockCarbonProjects } from '@/lib/api/mock/carbonProjects';
 import { Text } from '@/components/atoms/Text';
 import { useAppTranslation } from '@/hooks/useTranslation';
 
-export default function ComparePage(): JSX.Element {
+export default function ComparePage() {
   const router = useRouter();
   const { t } = useAppTranslation();
 

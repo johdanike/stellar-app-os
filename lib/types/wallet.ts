@@ -32,4 +32,8 @@ export interface WalletContextValue {
 
 export interface WalletConnectionProps {
   onConnectionChange?: (connection: WalletConnection | null) => void;
+  title?: string;
+  description?: string;
+  connectedTitle?: string;
+  connectedDescription?: string;
 }

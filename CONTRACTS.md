@@ -39,12 +39,27 @@ Contracts panic with a descriptive string on invalid input. The Stellar SDK surf
 | `"proposal has not passed"` | Attempting to execute a non-passed proposal |
 | `"planting density below minimum for job size"` — Job area meets threshold but density is too low |
 | `"area hectares must be positive"` — `area_hectares ≤ 0` |
+| `"survival not yet verified"` — Attempting to call 1-year milestone before survival check |
+| `"1-year milestone period not yet elapsed"` — Called before 1 year elapsed since planting |
+| `"rating must be between 1 and 5"` — Rating outside valid range |
+| `"can only rate after escrow is completed"` — Rating before job completion |
+| `"only the original donor can rate the planter"` — Non-donor attempting to rate |
+| `"sponsor has already rated this planter"` — Duplicate rating attempt |
 
 ---
 
 ## tree-escrow
 
-State machine: `Funded → Planted → Completed` (or `Funded → Refunded`)
+State machine: `Funded → Planted → Survived → Completed` (or `Funded → Refunded`)
+
+**Time-Locked Milestones (#494):** Funds are released in 3 tranches:
+- Tranche 1 (30%) at planting verification
+- Tranche 2 (40%) at 6-month survival check
+- Tranche 3 (30%) at 1-year milestone
+
+**Minimum Planting Density Rule (#514):** For jobs with `area_hectares` ≥ `job_size_threshold`, the contract enforces a minimum planting density of `min_density` trees per hectare. Small jobs below the threshold are exempt from density rules.
+
+**Planter Rating System (#483):** After job completion, sponsors can rate planters (1-5 stars). Ratings are stored on-chain and aggregated into a reputation score (0-100) to track planter performance over time.
 
 **Minimum Planting Density Rule (#514):** For jobs with `area_hectares` ≥ `job_size_threshold`, the contract enforces a minimum planting density of `min_density` trees per hectare. Small jobs below the threshold are exempt from density rules.
 
@@ -144,7 +159,7 @@ await client.deposit({
 
 ### `verify_planting`
 
-Admin confirms GPS + photo proof of planting. Releases **75%** of escrowed funds to the farmer immediately.
+Admin confirms GPS + photo proof of planting. Releases **Tranche 1 (30%)** of escrowed funds to the farmer immediately and mints TREE tokens.
 
 **Auth:** admin-only
 
@@ -181,14 +196,15 @@ await client.verify_planting({
 
 ### `verify_survival`
 
-Admin confirms 6-month survival check. Releases the remaining **25%** to the farmer. Enforces that at least 6 months (≈ 26 weeks) have elapsed since `verify_planting`.
+Admin confirms 6-month survival check. Releases **Tranche 2 (40%)** to the farmer. Enforces that at least 6 months (≈ 26 weeks) have elapsed since `verify_planting` and survival rate meets threshold.
 
 **Auth:** admin-only
 
 | Parameter | Type | Description |
 |---|---|---|
-| `farmer` | `Address` | Farmer whose escrow to complete |
+| `farmer` | `Address` | Farmer whose escrow to update |
 | `proof_hash` | `BytesN<32>` | SHA-256 of the survival proof payload |
+| `survival_rate_percent` | `u32` | Survival rate (0..=100) |
 
 **Returns:** `void`
 
@@ -197,12 +213,43 @@ Admin confirms 6-month survival check. Releases the remaining **25%** to the far
 **Errors:**
 - `"planting not yet verified"` — status is not `Planted`
 - `"6-month survival period not yet elapsed"` — called too early
+- `"survival rate below minimum"` — survival rate below configured threshold
 - `"nothing left to release"` — released amount already equals total
 
 ```ts
 await client.verify_survival({
   farmer: farmerAddress,
   proof_hash: survivalProofHash,
+  survival_rate_percent: 70,
+});
+```
+
+---
+
+### `verify_year_milestone`
+
+Admin confirms 1-year milestone. Releases **Tranche 3 (30%)** to the farmer. Enforces that at least 1 year (≈ 52 weeks) has elapsed since `verify_planting`.
+
+**Auth:** admin-only
+
+| Parameter | Type | Description |
+|---|---|---|
+| `farmer` | `Address` | Farmer whose escrow to complete |
+| `proof_hash` | `BytesN<32>` | SHA-256 of the year milestone proof payload |
+
+**Returns:** `void`
+
+**Events emitted:** `YearMilestone(farmer) → (tranche3_amount, proof_hash)`
+
+**Errors:**
+- `"survival not yet verified"` — status is not `Survived`
+- `"1-year milestone period not yet elapsed"` — called too early
+- `"nothing left to release"` — released amount already equals total
+
+```ts
+await client.verify_year_milestone({
+  farmer: farmerAddress,
+  proof_hash: yearMilestoneProofHash,
 });
 ```
 
@@ -243,9 +290,67 @@ Read-only. Returns the full escrow record for a farmer.
 
 ```ts
 const record = await client.get_record({ farmer: farmerAddress });
-// record.status: "Funded" | "Planted" | "Completed" | "Refunded"
+// record.status: "Funded" | "Planted" | "Survived" | "Completed" | "Refunded"
 // record.total_amount: bigint
 // record.released: bigint
+```
+
+---
+
+### `rate_planter`
+
+Sponsor rates a planter after job completion. Rating must be 1-5 stars. Only callable by the original donor after escrow is completed. Each sponsor can only rate a specific planter once per escrow.
+
+**Auth:** sponsor (caller-auth)
+
+| Parameter | Type | Description |
+|---|---|---|
+| `sponsor` | `Address` | Sponsor/donor providing the rating |
+| `farmer` | `Address` | Planter being rated |
+| `rating` | `u32` | Rating from 1-5 stars |
+
+**Returns:** `void`
+
+**Events emitted:** `Rated(farmer) → (sponsor, rating)`
+
+**Errors:**
+- `"rating must be between 1 and 5"` — Rating outside valid range
+- `"no escrow for farmer"` — No escrow record found
+- `"only the original donor can rate the planter"` — Caller is not the donor
+- `"can only rate after escrow is completed"` — Escrow not in Completed state
+- `"sponsor has already rated this planter"` — Duplicate rating attempt
+
+```ts
+await client.rate_planter({
+  sponsor: donorAddress,
+  farmer: farmerAddress,
+  rating: 5, // 1-5 stars
+});
+```
+
+---
+
+### `get_planter_reputation`
+
+Query the aggregated reputation score for a planter.
+
+**Auth:** public (no auth required)
+
+| Parameter | Type | Description |
+|---|---|---|
+| `farmer` | `Address` | Planter address to look up |
+
+**Returns:** `Option<PlanterReputation>` with fields:
+- `total_ratings: u32` — Number of ratings received
+- `sum_ratings: u128` — Sum of all ratings (1-5 each)
+- `average_rating: u32` — Scaled average (0-100, where 100 = 5 stars)
+
+```ts
+const reputation = await client.get_planter_reputation({ farmer: farmerAddress });
+if (reputation) {
+  console.log(`Average rating: ${reputation.average_rating / 20} stars`);
+  console.log(`Total ratings: ${reputation.total_ratings}`);
+}
 ```
 
 ---

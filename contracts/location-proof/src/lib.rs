@@ -13,9 +13,18 @@
 //! The off-chain prover is trusted to set `in_region` correctly; the contract
 //! enforces that only the designated verifier can submit proofs.
 
+use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN, Env,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, Address,
+    Bytes, BytesN, Env,
 };
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum LocationProofError {
+    OutsideNigeriaRegion = 65,
+    ProofCommitmentAlreadyReg = 66,
+}
 
 const ADMIN: &str = "ADMIN";
 
@@ -46,7 +55,7 @@ impl LocationProof {
     /// One-time initialisation — sets the verifier/admin address.
     pub fn initialize(env: Env, admin: Address) {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
-            panic!("already initialized");
+            panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
         env.storage()
             .instance()
@@ -69,12 +78,12 @@ impl LocationProof {
         Self::require_admin(&env);
 
         if !in_region {
-            panic!("location outside Northern Nigeria boundary");
+            panic_with_error!(&env, LocationProofError::OutsideNigeriaRegion);
         }
 
         // Reject duplicate commitments (replay / double-count)
         if env.storage().persistent().has(&commitment) {
-            panic!("proof commitment already registered");
+            panic_with_error!(&env, LocationProofError::ProofCommitmentAlreadyReg);
         }
 
         let entry = LocationProofEntry {
@@ -108,7 +117,7 @@ impl LocationProof {
             .storage()
             .instance()
             .get(&symbol_short!("ADMIN"))
-            .expect("contract not initialized");
+            .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized));
         admin.require_auth();
     }
 }
@@ -153,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "proof commitment already registered")]
+    #[should_panic(expected = "Error(Contract, #66)")]
     fn test_replay_rejected() {
         let (env, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -164,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "location outside Northern Nigeria boundary")]
+    #[should_panic(expected = "Error(Contract, #65)")]
     fn test_out_of_region_rejected() {
         let (env, _, client) = setup();
         let farmer = Address::generate(&env);
