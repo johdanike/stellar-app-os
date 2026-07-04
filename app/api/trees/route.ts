@@ -26,11 +26,11 @@ export async function GET(request: NextRequest) {
 
     const opts = {
       species: p.get('species') ?? undefined,
-      region:  p.get('region')  ?? undefined,
-      status:  p.get('status')  ?? undefined,
-      search:  p.get('search')  ?? undefined,
-      limit:   p.has('limit')  ? parseInt(p.get('limit')!,  10) : 50,
-      offset:  p.has('offset') ? parseInt(p.get('offset')!, 10) : 0,
+      region: p.get('region') ?? undefined,
+      status: p.get('status') ?? undefined,
+      search: p.get('search') ?? undefined,
+      limit: p.has('limit') ? parseInt(p.get('limit')!, 10) : 50,
+      offset: p.has('offset') ? parseInt(p.get('offset')!, 10) : 0,
     };
 
     const result = await getTreeList(opts);
