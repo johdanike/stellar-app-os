@@ -6,6 +6,7 @@
  */
 
 import { TransactionBuilder, Operation, BASE_FEE } from '@stellar/stellar-sdk';
+import { TransactionBuilder, Operation, BASE_FEE, xdr, Address } from '@stellar/stellar-sdk';
 import { Horizon } from '@stellar/stellar-sdk';
 import type { NetworkType } from '@/lib/types/wallet';
 import { networkConfig } from '@/lib/config/network';
@@ -51,6 +52,7 @@ export function getSpeciesVotingContract(network: NetworkType): string {
     network === 'mainnet'
       ? SPECIES_VOTING_CONTRACT_MAINNET
       : SPECIES_VOTING_CONTRACT_TESTNET;
+    network === 'mainnet' ? SPECIES_VOTING_CONTRACT_MAINNET : SPECIES_VOTING_CONTRACT_TESTNET;
   if (!address) {
     throw new Error('Species voting contract not deployed for this network');
   }
@@ -109,6 +111,14 @@ export async function buildProposeSpeciesTransaction(
           contractId: getSpeciesVotingContract(network),
           functionName: 'propose_species',
         },
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          new xdr.InvokeContractArgs({
+            contractAddress: new Address(getSpeciesVotingContract(network)).toScAddress(),
+            functionName: 'propose_species',
+            args: [],
+          })
+        ),
+        auth: [],
       })
     )
     .setTimeout(300)
@@ -156,6 +166,14 @@ export async function buildVoteTransaction(
           contractId: getSpeciesVotingContract(network),
           functionName: 'vote',
         },
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          new xdr.InvokeContractArgs({
+            contractAddress: new Address(getSpeciesVotingContract(network)).toScAddress(),
+            functionName: 'vote',
+            args: [],
+          })
+        ),
+        auth: [],
       })
     )
     .setTimeout(300)
@@ -201,6 +219,14 @@ export async function buildExecuteProposalTransaction(
           contractId: getSpeciesVotingContract(network),
           functionName: 'execute_proposal',
         },
+        func: xdr.HostFunction.hostFunctionTypeInvokeContract(
+          new xdr.InvokeContractArgs({
+            contractAddress: new Address(getSpeciesVotingContract(network)).toScAddress(),
+            functionName: 'execute_proposal',
+            args: [],
+          })
+        ),
+        auth: [],
       })
     )
     .setTimeout(300)
@@ -242,6 +268,12 @@ export function formatVotingTimeRemaining(votingEndsAt: number): string {
  const days = Math.floor(remaining / 86400);
   const hours = Math.floor((remaining % 86400) / 3600);
   
+
+  if (remaining <= 0) return 'Voting ended';
+
+  const days = Math.floor(remaining / 86400);
+  const hours = Math.floor((remaining % 86400) / 3600);
+
   if (days > 0) return `${days} day${days > 1 ? 's' : ''} remaining`;
   if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} remaining`;
   return 'Less than 1 hour remaining';
