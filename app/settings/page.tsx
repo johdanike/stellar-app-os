@@ -15,10 +15,17 @@ import {
 } from '@/components/molecules/Card';
 import { cn } from '@/lib/utils';
 import { hasCompletedOnboardingTour, requestOnboardingTourRestart } from '@/lib/onboardingTour';
+import { PreferencesSection } from '@/components/organisms/settings/PreferencesSection';
 
 type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
 
-const NAV_ITEMS: { id: TabId; label: string; icon: ReactNode }[] = [
+interface NavItem {
+  id: TabId;
+  label: string;
+  icon?: ReactNode;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { id: 'profile', label: 'Profile', icon: '👤' },
   { id: 'notifications', label: 'Notifications', icon: '🔔' },
   { id: 'preferences', label: 'Preferences', icon: '⚙️' },
@@ -43,13 +50,6 @@ function NotificationSection() {
   return (
     <div>
       <Text variant="muted">Notification settings coming soon.</Text>
-    </div>
-  );
-}
-function PreferencesSection() {
-  return (
-    <div>
-      <Text variant="muted">Preference settings coming soon.</Text>
     </div>
   );
 }
@@ -125,8 +125,6 @@ export default function SettingsPage(): ReactNode {
                       )}
                     />
                     <span className="hidden sm:inline">{item.label}</span>
-
-                    <span className="sm:hidden">{item.icon}</span>
                   </button>
                 ))}
               </nav>

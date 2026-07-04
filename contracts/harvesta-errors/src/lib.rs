@@ -6,8 +6,9 @@
 //! instead of raw string panics.  Error codes are stable u32 values embedded in
 //! the Stellar XDR so off-chain tooling can parse them without string matching.
 //!
-//! NOTE: Error count reduced to stay within Soroban SDK limits.
-//! Only essential errors for current contracts are included.
+//! NOTE: Error count is capped at 48 variants to stay within the Soroban SDK
+//! `#[contracterror]` XDR spec limit.  Carbon marketplace codes (100–113)
+//! are excluded — move them to a `carbon-marketplace-errors` crate if needed.
 
 use soroban_sdk::contracterror;
 
@@ -62,49 +63,26 @@ pub enum HarvestaError {
     FarmerNotRegistered = 36,
     InvalidRegion = 37,
 
-    // ── Dispute / arbiter (38–46) ─────────────────────────────────────────────
-    DisputeAlreadyOpen = 38,
-    NoOpenDispute = 39,
-    EscrowAlreadyFinalised = 40,
-    NotArbiter = 41,
-    NotBuyerOrSeller = 42,
-    MilestoneReleaseBlocked = 43,
-    MilestoneAlreadyProcessed = 44,
-    CompletionPercentageOutOfRange = 45,
-    TotalReleasedExceedsMilestone = 46,
-
     // ── KYC attestation (61) ─────────────────────────────────────────────────
     /// Caller is not a registered verifier — attest_kyc / verify_kyc denied.
     NotVerifier = 61,
 
-    // ── Species registry (62–64) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 74-75) ───────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
+    InvasiveSpecies = 74,
+    HighWaterUse = 75,
 
-    // ── ZK location / KYC (65–72) ────────────────────────────────────────────
-    /// Region geohash is outside the approved Northern Nigeria boundary.
-    OutsideNigeriaRegion = 65,
-    /// Farmer registry: caller is not a registered validator.
-    NotValidator = 66,
-    /// A commitment with this hash has already been submitted.
-    CommitmentAlreadySubmitted = 67,
-    /// No commitment record found for the supplied hash.
-    CommitmentNotFound = 68,
-    /// The commitment is not in Pending state (already approved or rejected).
-    CommitmentNotPending = 69,
-    /// The supplied ZK proof digest failed on-chain integrity validation.
-    ZkProofInvalid = 70,
-    /// The age encoded in the ZK proof is below the minimum threshold.
-    AgeBelowMinimum = 71,
-    /// The ZK proof's validity window has expired (ledger timestamp exceeded).
-    ProofExpired = 72,
-
-    // ── Farmer registry hash integrity (73–74) ────────────────────────────────
+    // ── Farmer registry hash integrity (73) ────────────────────────────────
     /// SHA-256 of the supplied document pre-image does not match the stored hash.
     HashMismatch = 73,
 
     // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
+
+    // ── Tree lifecycle state machine (#462) ───────────────────────────────────
+    InvalidTreeStatusTransition = 90,
+    PlantingTimeoutNotReached = 91,
 }

@@ -40,19 +40,30 @@
 //!   `("KYC_HST", farmer)`              → `Vec<Attestation>`
 
 use harvesta_errors::HarvestaError;
-use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Bytes, BytesN,
-    Env, IntoVal, String, Vec,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Bytes, BytesN, Env, IntoVal, String, Vec};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /// Minimum age (years) that the ZK circuit must attest to.
 /// The circuit encodes this threshold; the contract enforces it stays constant.
 pub const MIN_AGE_YEARS: u32 = 18;
-
 /// Approved 2-char geohash prefixes for Northern Nigeria (s0–s8).
 const VALID_REGIONS: [&str; 9] = ["s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"];
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    /// A ZK proof with this age commitment has already been submitted for another
+    /// farmer, indicating a potential replay attack.
+    CommitmentAlreadySubmitted = 1,
+    /// The ZK proof's validity window has expired (ledger timestamp exceeded).
+    ProofExpired = 2,
+    /// The region geohash in the proof is outside the approved Northern Nigeria boundary.
+    OutsideNigeriaRegion = 3,
+    /// The supplied ZK proof's region commitment does not match the plaintext.
+    ZkProofInvalid = 4,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -240,12 +251,12 @@ impl KycAttestation {
             .instance()
             .has(&zk_commitment_key(&env, &proof.age_commitment))
         {
-            panic_with_error!(&env, HarvestaError::CommitmentAlreadySubmitted);
+            panic_with_error!(&env, Error::CommitmentAlreadySubmitted);
         }
 
         // 1. Expiry check
         if proof.valid_until <= env.ledger().timestamp() {
-            panic_with_error!(&env, HarvestaError::ProofExpired);
+            panic_with_error!(&env, Error::ProofExpired);
         }
 
         // 2. Region boundary check
@@ -262,7 +273,7 @@ impl KycAttestation {
         let region_bytes = Bytes::from_slice(&env, &region_buf[..region_len]);
         let derived_region_hash: BytesN<32> = env.crypto().sha256(&region_bytes).into();
         if derived_region_hash != proof.region_commitment {
-            panic_with_error!(&env, HarvestaError::ZkProofInvalid);
+            panic_with_error!(&env, Error::ZkProofInvalid);
         }
 
         // 4. Proof integrity: store SHA-256(proof_digest) as second-preimage guard
@@ -389,7 +400,7 @@ impl KycAttestation {
                 return;
             }
         }
-        panic_with_error!(env, HarvestaError::OutsideNigeriaRegion);
+        panic_with_error!(env, Error::OutsideNigeriaRegion);
     }
 }
 
@@ -537,7 +548,7 @@ mod tests {
     // ── verify_kyc — error paths ──────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #1)")]
     fn test_verify_kyc_rejects_reused_commitment() {
         let (env, _, verifier, client) = setup();
         let farmer1 = Address::generate(&env);
@@ -566,7 +577,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #72)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_expired_proof_rejected() {
         let (env, _, verifier, client) = setup();
         let farmer = Address::generate(&env);
@@ -578,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #72)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_proof_expiring_at_exact_timestamp_rejected() {
         // valid_until must be strictly greater than current timestamp
         let (env, _, verifier, client) = setup();
@@ -590,7 +601,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #65)")]
+    #[should_panic(expected = "Error(Contract, #3)")]
     fn test_invalid_region_rejected() {
         let (env, _, verifier, client) = setup();
         let farmer = Address::generate(&env);
@@ -602,7 +613,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #70)")]
+    #[should_panic(expected = "Error(Contract, #4)")]
     fn test_region_commitment_mismatch_rejected() {
         let (env, _, verifier, client) = setup();
         let farmer = Address::generate(&env);
