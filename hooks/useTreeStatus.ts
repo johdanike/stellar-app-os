@@ -19,10 +19,15 @@ export function useTreeStatus(options: UseTreeStatusOptions = {}): UseTreeStatus
   const [error, setError] = useState<Event | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const onEventRef = useRef(options.onEvent);
+<<<<<<< HEAD
+  onEventRef.current = options.onEvent; // <-- ESLint hates this
+  onEventRef.current = options.onEvent;
+=======
 
   useEffect(() => {
     onEventRef.current = options.onEvent;
   }, [options.onEvent]);
+>>>>>>> 4fa2ff0e46c01b84d0a39c3524e33dea37e50005
 
   useEffect(() => {
     const es = new EventSource('/api/trees/status');

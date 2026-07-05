@@ -32,7 +32,11 @@ async function fetchAssetBalance(
 ): Promise<BalanceResult> {
   const account = await server.loadAccount(address);
   const balanceRow = account.balances.find(
-    (b) => (b as any).asset_code === assetCode && (b as any).asset_issuer === assetIssuer
+    (b) =>
+      'asset_code' in b &&
+      b.asset_code === assetCode &&
+      'asset_issuer' in b &&
+      b.asset_issuer === assetIssuer
   );
   const balance = balanceRow ? parseFloat(balanceRow.balance) : 0;
   return { address, assetCode, balance };

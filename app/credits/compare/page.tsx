@@ -1,6 +1,5 @@
 'use client';
 
-import type { JSX } from 'react';
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ComparisonTool } from '@/components/organisms/ComparisonTool/ComparisonTool';
