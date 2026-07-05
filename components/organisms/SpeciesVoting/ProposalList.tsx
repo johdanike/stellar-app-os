@@ -1,28 +1,19 @@
 'use client';
-
-/**
- * ProposalList — Species voting dashboard (#663)
- *
- * Displays active proposals with:
- *  - Species details (name, slug, CO₂ sequestration, maturity)
- *  - Vote percentages rendered with Progress bar
- *  - Remaining campaign timeline
- *  - Vote buttons that trigger wallet signature (pending → confirmed / failed)
- */
-
 import { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
+import { useWalletContext } from '@/contexts/WalletContext';
 import {
   ProposalStatus,
   formatVotingTimeRemaining,
@@ -31,7 +22,6 @@ import {
   buildExecuteProposalTransaction,
   type ProposalRecord,
 } from '@/lib/stellar/species-voting';
-import { useWalletContext } from '@/contexts/WalletContext';
 import {
   ThumbsUp,
   ThumbsDown,
@@ -39,12 +29,11 @@ import {
   CheckCircle2,
   XCircle,
   PlayCircle,
-  Loader2,
-  AlertCircle,
-  Leaf,
   TreePine,
+  Leaf,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -62,11 +51,11 @@ const mockProposals: ProposalRecord[] = [
     id: 1,
     slug: 'mahogany',
     name: 'Mahogany',
-    co2_scaled: 2500,
+    co2_scaled: 2500n,
     maturity_years: 25,
     proposer: 'GABCD1234EFGH5678IJKL9012MNOP3456QRST7890UVWX1234YZ56',
-    votes_for: 750_000,
-    votes_against: 50_000,
+    votes_for: 750_000n,
+    votes_against: 50_000n,
     status: ProposalStatus.Active,
     created_at: Date.now() / 1000 - 86400 * 2,
     voting_ends_at: Date.now() / 1000 + 86400 * 5,
@@ -75,11 +64,11 @@ const mockProposals: ProposalRecord[] = [
     id: 2,
     slug: 'iroko',
     name: 'Iroko',
-    co2_scaled: 3400,
+    co2_scaled: 3400n,
     maturity_years: 40,
     proposer: 'GXYZ9876ABCD5432EFGH1098IJKL7654MNOP3210QRST9876UVWX',
-    votes_for: 320_000,
-    votes_against: 280_000,
+    votes_for: 320_000n,
+    votes_against: 280_000n,
     status: ProposalStatus.Active,
     created_at: Date.now() / 1000 - 86400 * 1,
     voting_ends_at: Date.now() / 1000 + 86400 * 6,
@@ -88,11 +77,11 @@ const mockProposals: ProposalRecord[] = [
     id: 3,
     slug: 'oak',
     name: 'Oak',
-    co2_scaled: 3000,
+    co2_scaled: 3000n,
     maturity_years: 30,
     proposer: 'GXYZ9876ABCD5432EFGH1098IJKL7654MNOP3210QRST9876UVWX',
-    votes_for: 1_200_000,
-    votes_against: 100_000,
+    votes_for: 1_200_000n,
+    votes_against: 100_000n,
     status: ProposalStatus.Passed,
     created_at: Date.now() / 1000 - 86400 * 10,
     voting_ends_at: Date.now() / 1000 - 86400 * 3,
@@ -127,10 +116,7 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
 
   const config = configs[status];
   return (
-    <Badge
-      variant="outline"
-      className={cn('gap-1 text-xs font-medium', config.className)}
-    >
+    <Badge variant="outline" className={cn('gap-1 text-xs font-medium', config.className)}>
       {config.icon}
       {config.label}
     </Badge>
@@ -147,13 +133,7 @@ interface ProposalCardProps {
   onExecute: (proposalId: number) => Promise<void>;
 }
 
-function ProposalCard({
-  proposal,
-  voteState,
-  hasVoted,
-  onVote,
-  onExecute,
-}: ProposalCardProps) {
+function ProposalCard({ proposal, voteState, hasVoted, onVote, onExecute }: ProposalCardProps) {
   const votePercent = calculateVotePercentage(proposal.votes_for, proposal.votes_against);
   const totalVotes = proposal.votes_for + proposal.votes_against;
   const isSigning = voteState.status === 'signing';
@@ -187,16 +167,12 @@ function ProposalCard({
               CO₂ / year
             </span>
             <span className="text-sm font-semibold text-green-400">
-              {(proposal.co2_scaled / 100).toFixed(2)} kg
+              {(Number(proposal.co2_scaled) / 100).toFixed(2)} kg
             </span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] text-white/40 uppercase tracking-wider">
-              Maturity
-            </span>
-            <span className="text-sm font-semibold text-white">
-              {proposal.maturity_years} yrs
-            </span>
+            <span className="text-[11px] text-white/40 uppercase tracking-wider">Maturity</span>
+            <span className="text-sm font-semibold text-white">{proposal.maturity_years} yrs</span>
           </div>
         </div>
 
@@ -205,13 +181,13 @@ function ProposalCard({
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1.5 text-green-400 font-medium">
               <ThumbsUp className="h-3.5 w-3.5" aria-hidden="true" />
-              {proposal.votes_for.toLocaleString()} for
+              {Number(proposal.votes_for).toLocaleString()} for
             </span>
             <span className="text-white/40 text-[11px]">
-              {totalVotes > 0 ? `${totalVotes.toLocaleString()} total` : 'No votes yet'}
+              {totalVotes > 0n ? `${Number(totalVotes).toLocaleString()} total` : 'No votes yet'}
             </span>
             <span className="flex items-center gap-1.5 text-red-400 font-medium">
-              {proposal.votes_against.toLocaleString()} against
+              {Number(proposal.votes_against).toLocaleString()} against
               <ThumbsDown className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           </div>
@@ -247,9 +223,7 @@ function ProposalCard({
         {voteState.status === 'failed' && (
           <Alert className="border-red-500/30 bg-red-500/10 py-2" role="alert">
             <AlertCircle className="h-4 w-4 text-red-400" aria-hidden="true" />
-            <AlertDescription className="text-red-300 text-xs">
-              {voteState.error}
-            </AlertDescription>
+            <AlertDescription className="text-red-300 text-xs">{voteState.error}</AlertDescription>
           </Alert>
         )}
       </CardContent>
@@ -266,9 +240,15 @@ function ProposalCard({
               className="flex-1 bg-green-600 hover:bg-green-500 text-white border-0"
             >
               {isSigning && (voteState as { direction: boolean }).direction === true ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />Signing…</>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                  Signing…
+                </>
               ) : (
-                <><ThumbsUp className="h-4 w-4 mr-2" aria-hidden="true" />Vote For</>
+                <>
+                  <ThumbsUp className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Vote For
+                </>
               )}
             </Button>
             <Button
@@ -279,9 +259,15 @@ function ProposalCard({
               className="flex-1 border-red-500/40 text-red-400 hover:bg-red-500/10"
             >
               {isSigning && (voteState as { direction: boolean }).direction === false ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />Signing…</>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                  Signing…
+                </>
               ) : (
-                <><ThumbsDown className="h-4 w-4 mr-2" aria-hidden="true" />Vote Against</>
+                <>
+                  <ThumbsDown className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Vote Against
+                </>
               )}
             </Button>
           </div>
@@ -294,13 +280,12 @@ function ProposalCard({
         )}
 
         {proposal.status === ProposalStatus.Passed && (
-          <Button
-            onClick={() => onExecute(proposal.id)}
-            disabled={isSigning}
-            className="w-full"
-          >
+          <Button onClick={() => onExecute(proposal.id)} disabled={isSigning} className="w-full">
             {isSigning ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />Signing…</>
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                Signing…
+              </>
             ) : (
               'Execute Proposal'
             )}
@@ -331,8 +316,7 @@ export function ProposalList() {
   const setVoteState = (id: number, state: VoteState) =>
     setVoteStates((prev) => ({ ...prev, [id]: state }));
 
-  const getVoteState = (id: number): VoteState =>
-    voteStates[id] ?? { status: 'idle' };
+  const getVoteState = (id: number): VoteState => voteStates[id] ?? { status: 'idle' };
 
   // ── Vote handler ─────────────────────────────────────────────────────────
 
@@ -366,12 +350,11 @@ export function ProposalList() {
         setVoteState(proposalId, { status: 'confirmed', direction: voteFor });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to submit vote';
-        const isRejection = msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel');
+        const isRejection =
+          msg.toLowerCase().includes('reject') || msg.toLowerCase().includes('cancel');
         setVoteState(proposalId, {
           status: 'failed',
-          error: isRejection
-            ? 'Transaction cancelled. Your vote was not submitted.'
-            : msg,
+          error: isRejection ? 'Transaction cancelled. Your vote was not submitted.' : msg,
         });
       }
     },
@@ -428,7 +411,8 @@ export function ProposalList() {
     <Alert className="border-amber-500/30 bg-amber-500/10 mb-4">
       <AlertCircle className="h-4 w-4 text-amber-400" aria-hidden="true" />
       <AlertDescription className="text-amber-300 text-sm">
-        Connect your wallet to cast votes. Your voting power is proportional to your TREE token holdings.
+        Connect your wallet to cast votes. Your voting power is proportional to your TREE token
+        holdings.
       </AlertDescription>
     </Alert>
   );

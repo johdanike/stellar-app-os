@@ -119,8 +119,6 @@ export default function SettingsPage(): ReactNode {
                       )}
                     />
                     <span className="hidden sm:inline">{item.label}</span>
-
-                    <span className="sm:hidden">{item.icon}</span>
                   </button>
                 ))}
               </nav>

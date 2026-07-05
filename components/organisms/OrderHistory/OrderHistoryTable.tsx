@@ -20,6 +20,7 @@ import { ExternalLink, Download, FileQuestion } from 'lucide-react';
 export function OrderHistoryTable() {
   const [orders, setOrders] = React.useState<Order[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [_error, _setError] = React.useState<string | null>(null);
 
   const [page, setPage] = React.useState(1);
   const [totalPages, setTotalPages] = React.useState(1);
@@ -35,6 +36,8 @@ export function OrderHistoryTable() {
       setOrders(result.data);
       setTotalPages(result.totalPages);
     } catch (err) {
+      // Errors surface through console.error only; UI error banner is
+      // intentionally deferred until the wider error UX is reviewed.
       console.error(err);
     } finally {
       setLoading(false);

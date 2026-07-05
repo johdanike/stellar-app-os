@@ -15,10 +15,24 @@
 //!     the seller (farmer) or refund them to the buyer (funder).
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, BytesN,
-    Env, IntoVal, Symbol,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, token,
+    Address, BytesN, Env, IntoVal, Symbol,
 };
 use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum MilestoneError {
+    CompletionPercentOutOfRange = 42,
+    MilestoneReleaseBlocked = 43,
+    MilestoneAlreadyProcessed = 44,
+    TotalReleasedExceedsMile = 46,
+    NotBuyerOrSeller = 52,
+    DisputeAlreadyOpen = 53,
+    EscrowAlreadyFinalised = 54,
+    NotArbiter = 55,
+    NoOpenDispute = 56,
+}
 
 /// Percentage released on first milestone verification (basis points: 7500 = 75%)
 const MILESTONE_1_BPS: i128 = 7500;
@@ -131,7 +145,7 @@ impl EscrowMilestone {
     ) {
         funder.require_auth();
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::AmountMustBePositive);
+            panic_with_error!(&env, HarvestaError::ValueMustBePositive);
         }
 
         let key = Self::escrow_key(&env, &farmer);
@@ -184,7 +198,7 @@ impl EscrowMilestone {
         approver.require_auth();
 
         if completion_pct > 100 {
-            panic_with_error!(&env, HarvestaError::CompletionPercentageOutOfRange);
+            panic_with_error!(&env, MilestoneError::CompletionPercentOutOfRange);
         }
 
         let key = Self::escrow_key(&env, &milestone_id);
@@ -197,7 +211,7 @@ impl EscrowMilestone {
         let payout = (state.total_amount * completion_pct as i128) / 100;
 
         if state.released + payout > state.total_amount {
-            panic_with_error!(&env, HarvestaError::TotalReleasedExceedsMilestone);
+            panic_with_error!(&env, MilestoneError::TotalReleasedExceedsMile);
         }
 
         token::Client::new(&env, &state.token).transfer(
@@ -239,12 +253,19 @@ impl EscrowMilestone {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if state.dispute_open {
-            panic_with_error!(&env, HarvestaError::MilestoneReleaseBlocked);
+            panic_with_error!(&env, MilestoneError::MilestoneReleaseBlocked);
         }
         if state.status != EscrowStatus::Funded {
-            panic_with_error!(&env, HarvestaError::MilestoneAlreadyProcessed);
+            panic_with_error!(&env, MilestoneError::MilestoneAlreadyProcessed);
         }
 
+        // Replay attack prevention (#481): reject duplicate proof hashes
+        let used_key = Self::used_proof_key(&env, &verification_hash);
+        if env.storage().persistent().has(&used_key) {
+            panic!("proof hash already used: replay attack prevented");
+        }
+
+        let release_amount = (state.total_amount * MILESTONE_1_BPS) / BPS_DENOM;
         let release_amount = state
             .total_amount
             .checked_mul(MILESTONE_1_BPS)
@@ -260,8 +281,9 @@ impl EscrowMilestone {
 
         state.released = release_amount;
         state.status = EscrowStatus::Milestone1Released;
-        state.verification_hash = OptProof::Some(verification_hash);
+        state.verification_hash = OptProof::Some(verification_hash.clone());
         state.milestone1_verified_at = env.ledger().timestamp();
+        env.storage().persistent().set(&used_key, &true);
 
         env.storage().persistent().set(&key, &state);
 
@@ -306,6 +328,13 @@ impl EscrowMilestone {
             panic_with_error!(&env, HarvestaError::SurvivalRateBelowMinimum);
         }
 
+        // Replay attack prevention (#481): reject duplicate proof hashes
+        let used_key = Self::used_proof_key(&env, &survival_verification_hash);
+        if env.storage().persistent().has(&used_key) {
+            panic!("proof hash already used: replay attack prevented");
+        }
+
+        let remainder = state.total_amount - state.released;
         let remainder = state
             .total_amount
             .checked_sub(state.released)
@@ -322,8 +351,9 @@ impl EscrowMilestone {
             .checked_add(remainder)
             .expect("released amount overflow");
         state.status = EscrowStatus::Completed;
-        state.survival_verification_hash = OptProof::Some(survival_verification_hash);
+        state.survival_verification_hash = OptProof::Some(survival_verification_hash.clone());
         state.survival_rate_percent = survival_rate_percent;
+        env.storage().persistent().set(&used_key, &true);
 
         env.storage().persistent().set(&key, &state);
 
@@ -346,16 +376,16 @@ impl EscrowMilestone {
 
         // Only the buyer (funder) or seller (farmer) may raise a dispute
         if caller != state.funder && caller != state.farmer {
-            panic_with_error!(&env, HarvestaError::NotBuyerOrSeller);
+            panic_with_error!(&env, MilestoneError::NotBuyerOrSeller);
         }
 
         if state.dispute_open {
-            panic_with_error!(&env, HarvestaError::DisputeAlreadyOpen);
+            panic_with_error!(&env, MilestoneError::DisputeAlreadyOpen);
         }
 
         // Can only dispute while funds are at rest (not yet fully completed/refunded)
         if state.status == EscrowStatus::Completed || state.status == EscrowStatus::Refunded {
-            panic_with_error!(&env, HarvestaError::EscrowAlreadyFinalised);
+            panic_with_error!(&env, MilestoneError::EscrowAlreadyFinalised);
         }
 
         state.dispute_open = true;
@@ -381,11 +411,11 @@ impl EscrowMilestone {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if arbiter != state.arbiter {
-            panic_with_error!(&env, HarvestaError::NotArbiter);
+            panic_with_error!(&env, MilestoneError::NotArbiter);
         }
 
         if !state.dispute_open {
-            panic_with_error!(&env, HarvestaError::NoOpenDispute);
+            panic_with_error!(&env, MilestoneError::NoOpenDispute);
         }
 
         let remainder = state
@@ -469,6 +499,10 @@ impl EscrowMilestone {
         (symbol_short!("ESCROW"), farmer.clone()).into_val(env)
     }
 
+    fn used_proof_key(env: &Env, proof_hash: &BytesN<32>) -> soroban_sdk::Val {
+        (Symbol::new(env, "used_proof"), proof_hash.clone()).into_val(env)
+    }
+
     fn require_admin(env: &Env) {
         let admin: Address = env
             .storage()
@@ -478,8 +512,143 @@ impl EscrowMilestone {
         admin.require_auth();
     }
 
-    // ── Whitelist management ──────────────────────────────────────────────────
+    // ── Verifier registry (issue #635) ───────────────────────────────────────
 
+    /// Admin registers a trusted verifier address.
+    pub fn register_verifier(env: Env, verifier: Address) {
+        Self::require_admin(&env);
+        let mut list: soroban_sdk::Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("VERFRS"))
+            .unwrap_or(soroban_sdk::Vec::new(&env));
+
+        for i in 0..list.len() {
+            if list.get(i).unwrap() == verifier {
+                panic_with_error!(&env, HarvestaError::VerifierAlreadyRegistered);
+            }
+        }
+        list.push_back(verifier.clone());
+        env.storage().instance().set(&symbol_short!("VERFRS"), &list);
+        env.events().publish((symbol_short!("VerfAdded"),), verifier);
+    }
+
+    /// Admin removes a verifier address.
+    pub fn remove_verifier(env: Env, verifier: Address) {
+        Self::require_admin(&env);
+        let mut list: soroban_sdk::Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("VERFRS"))
+            .unwrap_or(soroban_sdk::Vec::new(&env));
+
+        let mut new_list = soroban_sdk::Vec::new(&env);
+        for i in 0..list.len() {
+            let v = list.get(i).unwrap();
+            if v != verifier {
+                new_list.push_back(v);
+            }
+        }
+        env.storage().instance().set(&symbol_short!("VERFRS"), &new_list);
+    }
+
+    /// Returns the list of registered verifiers.
+    pub fn get_verifiers(env: Env) -> soroban_sdk::Vec<Address> {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("VERFRS"))
+            .unwrap_or(soroban_sdk::Vec::new(&env))
+    }
+
+    /// A registered verifier casts their approval vote for a farmer's milestone.
+    /// milestone_id: 1 = planting, 2 = survival.
+    /// Funds release automatically once 2-of-N verifiers have voted.
+    pub fn approve_milestone(env: Env, verifier: Address, farmer: Address, milestone_id: u32) {
+        verifier.require_auth();
+
+        let verifiers: soroban_sdk::Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("VERFRS"))
+            .unwrap_or(soroban_sdk::Vec::new(&env));
+
+        let is_registered = (0..verifiers.len()).any(|i| verifiers.get(i).unwrap() == verifier);
+        if !is_registered {
+            panic_with_error!(&env, HarvestaError::NotAVerifier);
+        }
+
+        let vote_key: soroban_sdk::Val = (Symbol::new(&env, "VOTE"), farmer.clone(), milestone_id, verifier.clone())
+            .into_val(&env);
+        if env.storage().persistent().has(&vote_key) {
+            panic_with_error!(&env, HarvestaError::AlreadyVoted);
+        }
+        env.storage().persistent().set(&vote_key, &true);
+
+        let count_key: soroban_sdk::Val = (Symbol::new(&env, "VCNT"), farmer.clone(), milestone_id).into_val(&env);
+        let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0u32);
+        let new_count = count + 1;
+        env.storage().persistent().set(&count_key, &new_count);
+
+        env.events().publish(
+            (Symbol::new(&env, "VerifVote"), farmer.clone()),
+            (milestone_id, new_count),
+        );
+
+        const THRESHOLD: u32 = 2;
+        if new_count >= THRESHOLD {
+            let key = Self::escrow_key(&env, &farmer);
+            let state: EscrowState = env
+                .storage()
+                .persistent()
+                .get(&key)
+                .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
+
+            if state.dispute_open {
+                panic_with_error!(&env, HarvestaError::MilestoneReleaseBlocked);
+            }
+
+            if milestone_id == 1 && state.status == EscrowStatus::Funded {
+                let release_amount = state.total_amount
+                    .checked_mul(MILESTONE_1_BPS)
+                    .expect("overflow")
+                    .checked_div(BPS_DENOM)
+                    .expect("div error");
+                token::Client::new(&env, &state.token).transfer(
+                    &env.current_contract_address(),
+                    &state.farmer,
+                    &release_amount,
+                );
+                let mut s = state;
+                s.released = release_amount;
+                s.status = EscrowStatus::Milestone1Released;
+                env.storage().persistent().set(&key, &s);
+                env.events().publish((symbol_short!("m1release"), farmer), release_amount);
+
+            } else if milestone_id == 2 && state.status == EscrowStatus::Milestone1Released {
+                let remainder = state.total_amount
+                    .checked_sub(state.released)
+                    .expect("underflow");
+                if remainder > 0 {
+                    token::Client::new(&env, &state.token).transfer(
+                        &env.current_contract_address(),
+                        &state.farmer,
+                        &remainder,
+                    );
+                }
+                let mut s = state;
+                s.released = s.released.checked_add(remainder).expect("overflow");
+                s.status = EscrowStatus::Completed;
+                env.storage().persistent().set(&key, &s);
+                env.events().publish((symbol_short!("m2release"), farmer), remainder);
+            }
+        }
+    }
+
+    /// Returns the current vote count for a given farmer + milestone.
+    pub fn get_vote_count(env: Env, farmer: Address, milestone_id: u32) -> u32 {
+        let count_key: soroban_sdk::Val = (Symbol::new(&env, "VCNT"), farmer, milestone_id).into_val(&env);
+        env.storage().persistent().get(&count_key).unwrap_or(0u32)
+    }
     /// Add `addr` to the contract whitelist. Restricted to admin.
     pub fn add_to_whitelist(env: Env, addr: Address) {
         Self::require_admin(&env);
@@ -638,7 +807,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #43)")]
+    #[should_panic(expected = "Error(Contract, #25)")]
     fn test_verify_milestone_blocked_during_dispute() {
         let Ctx {
             env,
@@ -704,7 +873,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #44)")]
+    #[should_panic(expected = "Error(Contract, #26)")]
     fn test_double_verify_milestone_rejected() {
         let Ctx {
             env,
@@ -721,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #19)")]
+    #[should_panic(expected = "Error(Contract, #14)")]
     fn test_verify_survival_before_milestone_rejected() {
         let Ctx {
             env,
@@ -737,7 +906,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #24)")]
+    #[should_panic(expected = "Error(Contract, #18)")]
     fn test_survival_too_early_rejected() {
         let Ctx {
             env,
@@ -754,7 +923,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #23)")]
+    #[should_panic(expected = "Error(Contract, #17)")]
     fn test_survival_below_70_percent_rejected() {
         let Ctx {
             env,
@@ -787,7 +956,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #16)")]
+    #[should_panic(expected = "Error(Contract, #12)")]
     fn test_duplicate_deposit_rejected() {
         let Ctx {
             client,
@@ -831,7 +1000,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #20)")]
+    #[should_panic(expected = "Error(Contract, #15)")]
     fn test_refund_after_milestone_rejected() {
         let Ctx {
             env,
@@ -877,7 +1046,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #46)")]
+    #[should_panic(expected = "Error(Contract, #28)")]
     fn test_partial_release_over_release_attempt() {
         let Ctx {
             admin,
@@ -895,11 +1064,187 @@ mod tests {
         client.release_partial(&admin, &farmer, &10);
     }
 
+    // ── Replay attack prevention (#481) ────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_milestone_proof_replay_across_escrows_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            arbiter,
+            ..
+        } = setup();
+        let farmer_a = Address::generate(&env);
+        let farmer_b = Address::generate(&env);
+
+        // Fund two separate escrows with same proof hash
+        client.deposit(&funder, &farmer_a, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_a, &dummy_hash(&env, 1));
+
+        let donor2 = Address::generate(&env);
+        token::StellarAssetClient::new(&env, &token).mint(&donor2, &10_000);
+        client.deposit(&donor2, &farmer_b, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_b, &dummy_hash(&env, 1));
+    }
+
+    #[test]
+    fn test_milestone_proof_different_hashes_allowed() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            arbiter,
+            ..
+        } = setup();
+        let farmer_a = Address::generate(&env);
+        let farmer_b = Address::generate(&env);
+
+        client.deposit(&funder, &farmer_a, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_a, &dummy_hash(&env, 1));
+
+        let donor2 = Address::generate(&env);
+        token::StellarAssetClient::new(&env, &token).mint(&donor2, &10_000);
+        client.deposit(&donor2, &farmer_b, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_b, &dummy_hash(&env, 2));
+
+        assert_eq!(
+            client.get_escrow(&farmer_b).unwrap().status,
+            EscrowStatus::Milestone1Released
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_survival_proof_replay_across_escrows_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            arbiter,
+            ..
+        } = setup();
+        let farmer_a = Address::generate(&env);
+        let farmer_b = Address::generate(&env);
+
+        client.deposit(&funder, &farmer_a, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_a, &dummy_hash(&env, 1));
+
+        let donor2 = Address::generate(&env);
+        token::StellarAssetClient::new(&env, &token).mint(&donor2, &10_000);
+        client.deposit(&donor2, &farmer_b, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer_b, &dummy_hash(&env, 2));
+
+        env.ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        client.verify_survival(&farmer_a, &dummy_hash(&env, 3), &80);
+        client.verify_survival(&farmer_b, &dummy_hash(&env, 3), &80);
+    }
+
+    #[test]
+    #[should_panic(expected = "proof hash already used")]
+    fn test_milestone_proof_replay_as_survival_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            farmer,
+            arbiter,
+            ..
+        } = setup();
+        client.deposit(&funder, &farmer, &token, &10_000, &arbiter);
+        client.verify_milestone(&farmer, &dummy_hash(&env, 1));
+
+        env.ledger()
+            .with_mut(|l| l.timestamp += SIX_MONTHS_SECS + 1);
+
+        client.verify_survival(&farmer, &dummy_hash(&env, 1), &80);
+    }
+
     // ── Init guard ────────────────────────────────────────────────────────────
 
+    // ── Multi-party consensus tests (issue #635) ──────────────────────────────────
+
+    #[test]
+    fn test_verifier_registry_and_consensus_release() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            farmer,
+            arbiter,
+            ..
+        } = setup();
+
+        let v1 = Address::generate(&env);
+        let v2 = Address::generate(&env);
+        let v3 = Address::generate(&env);
+
+        client.register_verifier(&v1);
+        client.register_verifier(&v2);
+        client.register_verifier(&v3);
+
+        assert_eq!(client.get_verifiers().len(), 3);
+
+        client.deposit(&funder, &farmer, &token, &10_000, &arbiter);
+
+        // First vote — not enough yet
+        client.approve_milestone(&v1, &farmer, &1u32);
+        assert_eq!(balance(&env, &token, &farmer), 0);
+        assert_eq!(client.get_vote_count(&farmer, &1u32), 1);
+
+        // Second vote — consensus reached, funds released automatically
+        client.approve_milestone(&v2, &farmer, &1u32);
+        assert_eq!(client.get_vote_count(&farmer, &1u32), 2);
+        assert_eq!(balance(&env, &token, &farmer), 7_500);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unregistered_verifier_cannot_vote() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            farmer,
+            arbiter,
+            ..
+        } = setup();
+        client.deposit(&funder, &farmer, &token, &10_000, &arbiter);
+        let rogue = Address::generate(&env);
+        client.approve_milestone(&rogue, &farmer, &1u32);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_double_vote_rejected() {
+        let Ctx {
+            env,
+            client,
+            token,
+            funder,
+            farmer,
+            arbiter,
+            ..
+        } = setup();
+        let v1 = Address::generate(&env);
+        client.register_verifier(&v1);
+        client.deposit(&funder, &farmer, &token, &10_000, &arbiter);
+        client.approve_milestone(&v1, &farmer, &1u32);
+        client.approve_milestone(&v1, &farmer, &1u32); // should panic
+    }
     #[test]
     #[should_panic(expected = "Error(Contract, #1)")]
     fn test_initialize_twice_rejected() {
+        
         let Ctx { env, client, .. } = setup();
         client.initialize(&Address::generate(&env));
     }
