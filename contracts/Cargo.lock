@@ -23,7 +23,10 @@ version = "0.1.0"
 dependencies = [
  "contract-utils",
  "harvesta-errors",
+<<<<<<< HEAD
+=======
  "shared",
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
  "soroban-sdk 21.7.7",
 ]
 
@@ -280,6 +283,8 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+<<<<<<< HEAD
+=======
 ]
 
 [[package]]
@@ -298,6 +303,7 @@ dependencies = [
  "admin-controls",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 ]
 
 [[package]]
@@ -665,7 +671,10 @@ checksum = "2bfcf67fea2815c2fc3b90873fae90957be12ff417335dfadc7f52927feb03b2"
 name = "escrow"
 version = "0.1.0"
 dependencies = [
+<<<<<<< HEAD
+=======
  "admin-controls",
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
  "soroban-sdk 21.7.7",
 ]
 
@@ -1019,6 +1028,8 @@ dependencies = [
  "contract-utils",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
+<<<<<<< HEAD
+=======
 ]
 
 [[package]]
@@ -1028,6 +1039,7 @@ dependencies = [
  "contract-utils",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 ]
 
 [[package]]
@@ -1127,6 +1139,11 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+name = "planter-registry"
+version = "0.1.0"
+dependencies = [
+=======
 name = "planter-blacklist"
 version = "0.1.0"
 dependencies = [
@@ -1139,6 +1156,7 @@ name = "planter-registry"
 version = "0.1.0"
 dependencies = [
  "admin-controls",
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
  "soroban-sdk 21.7.7",
 ]
 
@@ -2128,6 +2146,8 @@ dependencies = [
  "harvesta-errors",
  "proptest",
  "soroban-sdk 21.7.7",
+<<<<<<< HEAD
+=======
 ]
 
 [[package]]
@@ -2140,6 +2160,7 @@ dependencies = [
  "escrow",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 ]
 
 [[package]]

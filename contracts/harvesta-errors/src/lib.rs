@@ -99,6 +99,36 @@ pub enum HarvestaError {
     /// on-chain for this farmer's identity document.
     HashMismatch = 68,
 
+    // ── ZK location / KYC / location-proof (61, 65–76) ───────────────────────
+    /// Caller is not a registered verifier.
+    NotVerifier = 61,
+    /// Region geohash is outside the approved Northern Nigeria boundary.
+    OutsideNigeriaRegion = 65,
+    /// A location-proof commitment with this hash is already registered.
+    ProofCommitmentAlreadyRegistered = 66,
+    /// A ZK commitment with this hash has already been submitted.
+    CommitmentAlreadySubmitted = 67,
+    /// No commitment record found for the supplied hash.
+    CommitmentNotFound = 68,
+    /// The commitment is not in Pending state (already approved or rejected).
+    CommitmentNotPending = 69,
+    /// The supplied ZK proof digest failed on-chain integrity validation.
+    ZkProofInvalid = 70,
+    /// The age encoded in the ZK proof is below the minimum threshold.
+    AgeBelowMinimum = 71,
+    /// The ZK proof's validity window has expired.
+    ProofExpired = 72,
+    /// SHA-256 of the supplied document pre-image does not match the stored hash.
+    HashMismatch = 73,
+    /// Caller is not a registered validator.
+    NotValidator = 74,
+    /// Polygon has fewer than 3 vertices — not a valid polygon.
+    PolygonTooFewVertices = 75,
+    /// The proof point falls outside the registered polygon boundary.
+    PointOutsidePolygon = 76,
+    /// The requested zone ID is not registered.
+    ZoneNotFound = 77,
+
     // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
