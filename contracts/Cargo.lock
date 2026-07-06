@@ -288,6 +288,8 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
 name = "carbon-credits"
 version = "0.1.0"
 dependencies = [
@@ -305,6 +307,7 @@ dependencies = [
 ]
 
 [[package]]
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 name = "cc"
 version = "1.2.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1964,14 +1967,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sponsor-receipt"
-version = "0.1.0"
-dependencies = [
- "contract-utils",
- "soroban-sdk 21.7.7",
-]
-
-[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2156,6 +2151,8 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
 name = "tree-registry"
 version = "0.1.0"
 dependencies = [
@@ -2167,6 +2164,7 @@ dependencies = [
 ]
 
 [[package]]
+>>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 name = "tree-token"
 version = "0.1.0"
 dependencies = [

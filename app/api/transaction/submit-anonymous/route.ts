@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     // Step 1: Verify the ZK proof
-    console.log('Verifying zero-knowledge proof...');
+    console.info('Verifying zero-knowledge proof...');
     const isProofValid = await verifyAnonymousDonationProof(proof);
 
     if (!isProofValid) {
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     }
 
     // Step 2: Check if nullifier has been used (prevent double-donations)
-    console.log('Checking nullifier...');
+    console.info('Checking nullifier...');
     const nullifierExists = await isNullifierUsed(nullifier, network);
 
     if (nullifierExists) {
@@ -82,11 +82,11 @@ export async function POST(request: Request) {
     }
 
     // Step 4: Submit the transaction to Stellar network
-    console.log('Submitting anonymous transaction to Stellar...');
+    console.info('Submitting anonymous transaction to Stellar...');
     const transactionHash = await submitTransaction(transactionXdr, network);
 
     // Step 5: Log the nullifier (in production, store in database)
-    console.log('Anonymous donation submitted:', {
+    console.info('Anonymous donation submitted:', {
       transactionHash,
       nullifier: nullifier.slice(0, 16) + '...',
       timestamp: proof.timestamp,
