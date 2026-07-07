@@ -15,12 +15,32 @@
 //!   4. Seller calls `cancel(seller, listing_id)` to de-list remaining tokens.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Env,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Env,
 };
 use harvesta_errors::HarvestaError;
 use admin_controls::AdminControlsClient;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum MarketplaceError {
+    ListingAmountMustBePositive = 100,
+    BuyAmountMustBePositive = 101,
+    AuctionNotFound = 102,
+    AuctionNotActive = 103,
+    SelfTrade = 104,
+    InsufficientLiquidity = 105,
+    AuctionExpired = 106,
+    BidBelowReservePrice = 107,
+    ListingNotFound = 108,
+    ListingNotActive = 109,
+    InvalidPriceRange = 110,
+    InvalidDecayRate = 111,
+    InvalidDuration = 112,
+    PriceMustBePositive = 113,
+}
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -783,14 +803,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #101)")]
+    #[should_panic(expected = "Error(Contract, #100)")]
     fn test_list_zero_amount_rejected() {
         let ctx = setup();
         ctx.client.list(&ctx.seller, &ctx.planter, &0, &10, &ctx.payment_token);
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #102)")]
+    #[should_panic(expected = "Error(Contract, #113)")]
     fn test_list_zero_price_rejected() {
         let ctx = setup();
         ctx.client.list(&ctx.seller, &ctx.planter, &1_000, &0, &ctx.payment_token);
@@ -834,7 +854,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #106)")]
+    #[should_panic(expected = "Error(Contract, #105)")]
     fn test_buy_more_than_available_rejected() {
         let ctx = setup();
         let id = ctx.client.list(&ctx.seller, &ctx.planter, &500, &10, &ctx.payment_token);
@@ -842,7 +862,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #107)")]
+    #[should_panic(expected = "Error(Contract, #101)")]
     fn test_buy_zero_amount_rejected() {
         let ctx = setup();
         let id = ctx.client.list(&ctx.seller, &ctx.planter, &1_000, &10, &ctx.payment_token);
@@ -850,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #104)")]
+    #[should_panic(expected = "Error(Contract, #109)")]
     fn test_buy_from_filled_listing_rejected() {
         let ctx = setup();
         let id = ctx.client.list(&ctx.seller, &ctx.planter, &1_000, &10, &ctx.payment_token);
@@ -859,14 +879,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #103)")]
+    #[should_panic(expected = "Error(Contract, #108)")]
     fn test_buy_nonexistent_listing_rejected() {
         let ctx = setup();
         ctx.client.buy(&ctx.buyer, &99, &1);
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #107)")]
+    #[should_panic(expected = "Error(Contract, #101)")]
     fn test_self_trade_via_zero_buy_amount() {
         let ctx = setup();
         let id = ctx.client.list(&ctx.seller, &ctx.planter, &1_000, &10, &ctx.payment_token);
@@ -891,7 +911,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #104)")]
+    #[should_panic(expected = "Error(Contract, #109)")]
     fn test_cancel_already_filled_listing_rejected() {
         let ctx = setup();
         let id = ctx.client.list(&ctx.seller, &ctx.planter, &500, &10, &ctx.payment_token);
@@ -919,21 +939,21 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #107)")]
+    #[should_panic(expected = "Error(Contract, #110)")]
     fn test_configure_auction_reserve_ge_starting_rejected() {
         let ctx = setup();
         ctx.client.configure_auction(&100, &100, &10, &3600);
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #108)")]
+    #[should_panic(expected = "Error(Contract, #111)")]
     fn test_configure_auction_invalid_decay_rate_rejected() {
         let ctx = setup();
         ctx.client.configure_auction(&100, &50, &0, &3600);
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #109)")]
+    #[should_panic(expected = "Error(Contract, #112)")]
     fn test_configure_auction_zero_duration_rejected() {
         let ctx = setup();
         ctx.client.configure_auction(&100, &50, &10, &0);
@@ -1007,7 +1027,7 @@ mod tests {
 
     #[test]
     fn test_bid_with_price_decay() {
-        let mut ctx = auction_setup();
+        let ctx = auction_setup();
         // Configure short duration for testing
         ctx.client.configure_auction(&100, &50, &100, &100);
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &1_000, &ctx.payment_token);
@@ -1043,7 +1063,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #104)")]
+    #[should_panic(expected = "Error(Contract, #105)")]
     fn test_bid_more_than_available_rejected() {
         let ctx = auction_setup();
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &500, &ctx.payment_token);
@@ -1051,7 +1071,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #105)")]
+    #[should_panic(expected = "Error(Contract, #101)")]
     fn test_bid_zero_amount_rejected() {
         let ctx = auction_setup();
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &1_000, &ctx.payment_token);
@@ -1059,7 +1079,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #111)")]
+    #[should_panic(expected = "Error(Contract, #103)")]
     fn test_bid_on_completed_auction_rejected() {
         let ctx = auction_setup();
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &1_000, &ctx.payment_token);
@@ -1068,14 +1088,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #110)")]
+    #[should_panic(expected = "Error(Contract, #102)")]
     fn test_bid_on_nonexistent_auction_rejected() {
         let ctx = auction_setup();
         ctx.client.bid(&ctx.buyer, &99, &1);
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #106)")]
+    #[should_panic(expected = "Error(Contract, #104)")]
     fn test_self_trade_via_bid() {
         let ctx = auction_setup();
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &1_000, &ctx.payment_token);
@@ -1083,9 +1103,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #112)")]
+    #[should_panic(expected = "Error(Contract, #106)")]
     fn test_bid_after_duration_rejected() {
-        let mut ctx = auction_setup();
+        let ctx = auction_setup();
         ctx.client.configure_auction(&100, &50, &10, &100);
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &1_000, &ctx.payment_token);
 
@@ -1113,7 +1133,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #111)")]
+    #[should_panic(expected = "Error(Contract, #103)")]
     fn test_cancel_completed_auction_rejected() {
         let ctx = auction_setup();
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &500, &ctx.payment_token);
@@ -1143,7 +1163,7 @@ mod tests {
 
     #[test]
     fn test_get_current_price_at_reserve() {
-        let mut ctx = auction_setup();
+        let ctx = auction_setup();
         ctx.client.configure_auction(&100, &50, &10, &100);
         let id = ctx.client.create_auction(&ctx.seller, &ctx.planter, &1_000, &ctx.payment_token);
 

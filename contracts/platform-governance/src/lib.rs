@@ -392,14 +392,16 @@ impl PlatformGovernance {
             .expect("not initialized");
         
         // Get raw voting power (staked token amount)
-        let raw_power = Self::get_voting_power(&env, &staking_contract, &voter);
-        
-        if raw_power <= 0 {
-
         let own_power = Self::get_voting_power(&env, &staking_contract, &voter);
+        
+        // Add delegated power from all direct delegators.
+        let delegated_power =
+            Self::aggregate_delegated_power(&env, &staking_contract, &voter);
+            
+        let raw_power = own_power + delegated_power;
 
-        if own_power <= 0 {
-            panic!("must be a staked verifier to vote");
+        if raw_power <= 0 {
+            panic!("must be a staked verifier or delegate to vote");
         }
         
         // Apply quadratic voting for SpeciesSelection proposals
@@ -409,11 +411,6 @@ impl PlatformGovernance {
         } else {
             raw_power
         };
-
-        // Add delegated power from all direct delegators.
-        let delegated_power =
-            Self::aggregate_delegated_power(&env, &staking_contract, &voter);
-        let power = own_power + delegated_power;
 
         // Validate option_id exists
         let option_exists = proposal.options.iter().any(|opt| opt.option_id == option_id);
@@ -1326,6 +1323,8 @@ mod tests {
 
         let proposal = client.get_proposal(&0);
         assert!(matches!(proposal.status, ProposalStatus::Executed));
+    }
+
     // ── Delegation tests ──────────────────────────────────────────────────────
 
     #[test]

@@ -788,7 +788,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #91)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_init_multisig_rejects_empty_signers() {
         let (env, _, _, client) = setup();
         let empty: Vec<Address> = Vec::new(&env);
@@ -796,7 +796,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #88)")]
+    #[should_panic(expected = "Error(Contract, #3)")]
     fn test_init_multisig_rejects_zero_threshold() {
         let (env, _, _, client) = setup();
         let signer = Address::generate(&env);
@@ -804,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #87)")]
+    #[should_panic(expected = "Error(Contract, #4)")]
     fn test_init_multisig_rejects_threshold_exceeding_signers() {
         let (env, _, _, client) = setup();
         let signer = Address::generate(&env);
@@ -875,7 +875,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #83)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_propose_rejected_for_non_signer() {
         let (env, _, _, client) = setup_multisig();
         let outsider = Address::generate(&env);
@@ -883,7 +883,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #83)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_approve_rejected_for_non_signer() {
         let (env, signer1, _, client) = setup_multisig();
         let id = client.propose(&signer1, &ProposalKind::Pause);
@@ -892,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #86)")]
+    #[should_panic(expected = "Error(Contract, #9)")]
     fn test_approve_rejected_when_already_approved() {
         let (_, signer1, _, client) = setup_multisig();
         let id = client.propose(&signer1, &ProposalKind::Pause);
@@ -900,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #85)")]
+    #[should_panic(expected = "Error(Contract, #8)")]
     fn test_approve_rejected_when_proposal_already_executed() {
         let (env, _, _, client) = setup();
         let signer = Address::generate(&env);
@@ -910,14 +910,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #84)")]
+    #[should_panic(expected = "Error(Contract, #7)")]
     fn test_get_proposal_panics_for_unknown_id() {
         let (_, _, _, client) = setup_multisig();
         client.get_proposal(&99);
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #82)")]
+    #[should_panic(expected = "Error(Contract, #5)")]
     fn test_propose_panics_when_multisig_not_initialized() {
         let (env, _, _, client) = setup();
         let signer = Address::generate(&env);

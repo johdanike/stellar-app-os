@@ -54,6 +54,9 @@ pub enum HarvestaError {
     TreeNotOpenForRelease = 33,
     NoFundsToRelease = 34,
 
+    // ── Species registry (62–64, 69–70) ───────────────────────────────────────
+    Co2MustBePositive = 62,
+    GrowthRateMustBePositive = 68,
     // ── Farmer registry (35–37) ───────────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
     FarmerNotRegistered = 36,
@@ -136,5 +139,46 @@ pub enum HarvestaError {
     // ── Tree lifecycle state machine (#462) ───────────────────────────────────
     InvalidTreeStatusTransition = 90,
     PlantingTimeoutNotReached = 91,
+    NonceAlreadyUsed = 93,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum GovernanceError {
+    NotAdmin = 1,
+    MinimumOneSignerRequired = 2,
+    ThresholdMustBePositive = 3,
+    ThresholdTooHigh = 4,
+    MultisigNotInitialized = 5,
+    NotASigner = 6,
+    ProposalNotFound = 7,
+    ProposalAlreadyExecuted = 8,
+    AlreadyApproved = 9,
+    SignerAlreadyExists = 10,
+    SignerNotFound = 11,
+    NonceAlreadyUsed = 93,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum NftError {
+    TokenAlreadyMinted = 1,
+    TokenNotFound = 2,
+    MetadataMismatch = 3,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum FarmerError {
+    FarmerAlreadyRegistered = 1,
+    FarmerNotRegistered = 2,
+    InvalidRegion = 3,
+    PlotAlreadyExists = 4,
+    InvalidCoordinatesCount = 5,
+    NotValidator = 6,
+    HashMismatch = 7,
 
 }

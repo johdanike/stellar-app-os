@@ -37,6 +37,7 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes,
     BytesN, Env, IntoVal, Symbol,
 };
+use soroban_sdk::xdr::ToXdr;
 use harvesta_errors::HarvestaError;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -460,7 +461,8 @@ impl TreeToken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, token, Address, Env, String};
+    use soroban_sdk::xdr::ToXdr;
+    use soroban_sdk::{testutils::{Address as _, Ledger}, token, Address, Env, String};
 
     // ── Burn test helpers ─────────────────────────────────────────────────────
 
