@@ -2981,6 +2981,7 @@ mod tests {
         ctx.client.request_replant(&ctx.farmer);
     }
 
+
     // ── Oracle survival reports (#394) ────────────────────────────────────────
 
     #[test]
