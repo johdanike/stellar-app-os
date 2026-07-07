@@ -13,6 +13,9 @@ import {
   CardTitle,
 } from '@/components/molecules/Card';
 import { hasCompletedOnboardingTour, requestOnboardingTourRestart } from '@/lib/onboardingTour';
+import { PreferencesSection } from '@/components/organisms/settings/PreferencesSection';
+
+type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
 
 const NAV_ITEMS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: '👤' },
