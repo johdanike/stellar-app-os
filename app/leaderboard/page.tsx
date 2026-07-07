@@ -6,7 +6,13 @@ import dynamic from 'next/dynamic';
 import { type LeaderboardSponsor, type LeaderboardPeriod } from '@/lib/types/leaderboard';
 import { Button } from '@/components/atoms/Button';
 import { Text } from '@/components/atoms/Text';
-import { Card, CardContent } from '@/components/molecules/Card';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/molecules/Card';
 import {
   Table,
   TableHeader,
@@ -87,7 +93,10 @@ function LeaderboardContent() {
   const globalCO2 = period === 'monthly' ? 332.5 : 3175.0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-stellar-blue/30 selection:text-white">
+    <main
+      id="main-content"
+      className="min-h-screen bg-slate-950 text-slate-100 selection:bg-stellar-blue/30 selection:text-white"
+    >
       {/* Background decoration */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[500px] pointer-events-none opacity-20 bg-[radial-gradient(ellipse_at_top,rgba(20,182,231,0.15),transparent_60%)]" />
 
@@ -482,7 +491,7 @@ function LeaderboardContent() {
           </div>
         )}
       </div>
-    </div>
+    </main>
   );
 }
 

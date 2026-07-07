@@ -134,7 +134,11 @@ export function PaymentMintingStep({
 
       <div className="space-y-4">
         {status !== 'idle' && status !== 'error' && (
-          <div className="rounded-lg border border-stellar-blue/30 bg-stellar-blue/5 p-4">
+          <div
+            className="rounded-lg border border-stellar-blue/30 bg-stellar-blue/5 p-4"
+            role="status"
+            aria-live="polite"
+          >
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0">
                 {status === 'preparing' && (
