@@ -91,6 +91,23 @@ fn admin_key() -> Symbol {
 }
 
 fn tree_token_key() -> Symbol {
+    symbol_short!("TREE_TOKEN")
+}
+
+fn species_registry_key() -> Symbol {
+    symbol_short!("SPECIES_REGISTRY")
+}
+
+fn proposal_count_key() -> Symbol {
+    symbol_short!("PROPOSAL_COUNT")
+}
+
+fn voting_threshold_key() -> Symbol {
+    symbol_short!("VOTE_THRESH")
+}
+
+fn voting_period_key() -> Symbol {
+    symbol_short!("VOTE_PERIOD")
     symbol_short!("TREE_TKN")
 }
 
@@ -180,6 +197,8 @@ impl SpeciesVoting {
         maturity_years: u32,
     ) {
         Self::assert_not_paused(&env);
+        
+        let proposer = env.invoker();
         proposer.require_auth();
 
         if co2_scaled <= 0 {
@@ -232,6 +251,10 @@ impl SpeciesVoting {
     ///
     /// `proposal_id` — proposal to vote on
     /// `vote_for`   — true to vote for, false to vote against
+    pub fn vote(env: Env, proposal_id: u64, vote_for: bool) {
+        Self::assert_not_paused(&env);
+
+        let voter = env.invoker();
     pub fn vote(env: Env, voter: Address, proposal_id: u64, vote_for: bool) {
         Self::assert_not_paused(&env);
         voter.require_auth();
@@ -311,6 +334,7 @@ impl SpeciesVoting {
     /// Execute a passed proposal to register the species in the species registry.
     ///
     /// `proposal_id` — proposal to execute
+    pub fn execute_proposal(env: Env, proposal_id: u64) {
     pub fn execute_proposal(env: Env, proposal_id: u64, total_supply: i128) {
         Self::assert_not_paused(&env);
 
@@ -324,6 +348,7 @@ impl SpeciesVoting {
             panic!("proposal has not passed");
         }
 
+        let species_registry: Address = env
         let total_votes = proposal.votes_for + proposal.votes_against;
 
         let quorum_bps: u32 = env
@@ -509,6 +534,15 @@ mod tests {
 
     #[test]
     fn test_propose_species() {
+        let (_, _, _, _, client) = setup();
+
+        let slug = Symbol::short("mahogany");
+        let name = String::from_str(&client.env, "Mahogany");
+        
+        client.propose_species(&slug, &name, &2500_i128, &25_u32);
+
+        assert_eq!(client.proposal_count(), 1);
+        
         let (env, admin, _, _, client) = setup();
 
         let slug = Symbol::short("mahogany");
@@ -535,6 +569,9 @@ mod tests {
 
         let slug = Symbol::short("oak");
         let name = String::from_str(&env, "Oak");
+        client.propose_species(&slug, &name, &3000_i128, &30_u32);
+
+        client.vote(&0, &true);
         client.propose_species(&admin, &slug, &name, &3000_i128, &30_u32);
 
         client.vote(&voter, &0, &true);
@@ -554,6 +591,10 @@ mod tests {
 
         let slug = Symbol::short("pine");
         let name = String::from_str(&env, "Pine");
+        client.propose_species(&slug, &name, &2000_i128, &15_u32);
+
+        client.vote(&0, &true);
+        client.vote(&0, &false);
         client.propose_species(&admin, &slug, &name, &2000_i128, &15_u32);
 
         client.vote(&voter, &0, &true);
@@ -563,6 +604,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "must hold TREE tokens to vote")]
     fn test_vote_without_tokens_rejected() {
+        let (_, _, _, _, client) = setup();
+
+        let slug = Symbol::short("cedar");
+        let name = String::from_str(&client.env, "Cedar");
+        client.propose_species(&slug, &name, &1800_i128, &20_u32);
+
+        client.vote(&0, &true);
         let (env, admin, _, _, client) = setup();
 
         let voter = Address::generate(&env);
@@ -584,6 +632,14 @@ mod tests {
 
         let slug = Symbol::short("maple");
         let name = String::from_str(&env, "Maple");
+        client.propose_species(&slug, &name, &2800_i128, &25_u32);
+
+        // Vote with voter1 (600k > 1M threshold, but need to test threshold logic)
+        // Actually threshold is 1M, so this won't pass yet
+        env.as_contract(&client.contract_id, || {
+            voter1.require_auth();
+            client.vote(&0, &true);
+        });
         client.propose_species(&admin, &slug, &name, &2800_i128, &25_u32);
 
         // voter1 has 600k — below the 1M threshold, so proposal stays Active
@@ -603,6 +659,13 @@ mod tests {
 
         let slug = Symbol::short("birch");
         let name = String::from_str(&env, "Birch");
+        client.propose_species(&slug, &name, &2200_i128, &20_u32);
+
+        client.vote(&0, &true);
+
+        let proposal = client.get_proposal(&0);
+        if matches!(proposal.status, ProposalStatus::Passed) {
+            client.execute_proposal(&0);
         client.propose_species(&admin, &slug, &name, &2200_i128, &20_u32);
 
         client.vote(&voter, &0, &true);
@@ -616,6 +679,15 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "proposal has not passed")]
+    fn test_execute_failed_proposal_rejected() {
+        let (_, _, _, _, client) = setup();
+
+        let slug = Symbol::short("elm");
+        let name = String::from_str(&client.env, "Elm");
+        client.propose_species(&slug, &name, &2400_i128, &22_u32);
+
+        client.execute_proposal(&0);
     #[should_panic(expected = "quorum not reached")]
     fn test_execute_proposal_fails_quorum() {
         let (env, admin, tree_token, _, client) = setup();
