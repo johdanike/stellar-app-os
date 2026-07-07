@@ -15,7 +15,6 @@ import { Checkbox } from '@/components/atoms/Checkbox';
 import { Input } from '@/components/atoms/Input';
 import { Select } from '@/components/atoms/Select';
 import { Text } from '@/components/atoms/Text';
-import { useToast } from '@/contexts/ToastContext';
 import {
   Card,
   CardContent,
@@ -61,7 +60,6 @@ interface AdminProjectDetailViewProps {
 }
 
 export function AdminProjectDetailView({ initialProject }: AdminProjectDetailViewProps): ReactNode {
-  const { toast } = useToast();
   const [project, setProject] = useState<AdminProjectDetail>(initialProject);
   const [formValues, setFormValues] = useState<AdminProjectFormValues>(() =>
     toFormValues(initialProject)
@@ -104,16 +102,6 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
         setFormValues(toFormValues(withAudit));
         return withAudit;
       });
-
-      if (updated.verificationEnabled && !project.verificationEnabled) {
-        toast.contract(
-          'Verification Complete',
-          `Project "${updated.name}" has been successfully verified on the blockchain.`
-        );
-      } else {
-        toast.success('Project Saved', `Successfully updated details for "${updated.name}".`);
-      }
-
       setStatusMessage('Project details saved successfully.');
     });
   }
@@ -652,20 +640,17 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <label
-                  htmlFor={uploadInputId}
-                  className="inline-flex cursor-pointer items-center justify-center rounded-md bg-stellar-blue px-4 py-2 text-sm font-medium text-white transition hover:bg-stellar-blue/90 focus-within:outline-none focus-within:ring-2 focus-within:ring-stellar-blue"
-                >
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-md bg-stellar-blue px-4 py-2 text-sm font-medium text-white transition hover:bg-stellar-blue/90 focus-within:ring-2 focus-within:ring-stellar-blue focus-within:ring-offset-2">
                   Upload MRV Document
+                  <input
+                    id={uploadInputId}
+                    type="file"
+                    className="sr-only"
+                    multiple
+                    onChange={handleMrvUpload}
+                    aria-describedby="mrv-upload-help"
+                  />
                 </label>
-                <input
-                  id={uploadInputId}
-                  type="file"
-                  className="sr-only"
-                  multiple
-                  onChange={handleMrvUpload}
-                  aria-describedby="mrv-upload-help"
-                />
                 <p id="mrv-upload-help" className="text-sm text-muted-foreground">
                   Accepted by browser file picker. Uploaded files are added to the document list
                   locally.
@@ -677,21 +662,33 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
                   <caption className="sr-only">MRV document upload list for this project</caption>
                   <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-3 font-medium">File</th>
-                      <th className="px-4 py-3 font-medium">Version</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Uploaded by</th>
-                      <th className="px-4 py-3 font-medium">Uploaded at</th>
-                      <th className="px-4 py-3 font-medium">Size</th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        File
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Version
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Status
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Uploaded by
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Uploaded at
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Size
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {project.mrvDocuments.map((document) => (
                       <tr key={document.id} className="border-t align-top">
-                        <td className="px-4 py-3">
+                        <th scope="row" className="px-4 py-3 font-medium text-left">
                           <div className="font-medium">{document.fileName}</div>
                           <div className="text-xs text-muted-foreground">{document.fileType}</div>
-                        </td>
+                        </th>
                         <td className="px-4 py-3">{document.version}</td>
                         <td className="px-4 py-3">
                           <Badge variant={documentStatusBadgeVariant(document.status)}>
@@ -724,12 +721,24 @@ export function AdminProjectDetailView({ initialProject }: AdminProjectDetailVie
                   </caption>
                   <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-3 font-medium">Date</th>
-                      <th className="px-4 py-3 font-medium">Batch ID</th>
-                      <th className="px-4 py-3 font-medium">Quantity</th>
-                      <th className="px-4 py-3 font-medium">Recipient</th>
-                      <th className="px-4 py-3 font-medium">Issued by</th>
-                      <th className="px-4 py-3 font-medium">Notes</th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Date
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Batch ID
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Quantity
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Recipient
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Issued by
+                      </th>
+                      <th scope="col" className="px-4 py-3 font-medium">
+                        Notes
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -833,7 +842,9 @@ function SummaryCard({
 function IssuanceRow({ record }: { record: AdminCreditIssuanceRecord }): ReactNode {
   return (
     <tr className="border-t align-top">
-      <td className="px-4 py-3">{formatDate(record.issuanceDate)}</td>
+      <th scope="row" className="px-4 py-3 font-normal text-left">
+        {formatDate(record.issuanceDate)}
+      </th>
       <td className="px-4 py-3 font-medium">{record.batchId}</td>
       <td className="px-4 py-3">{formatNumber(record.quantityTons)} tCO2e</td>
       <td className="px-4 py-3">{record.recipient}</td>

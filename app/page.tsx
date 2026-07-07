@@ -19,7 +19,6 @@ import { TransactionHistoryModal } from '@/components/ui/TransactionHistoryModal
 import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
 import { useToast } from '@/hooks/useToast';
 import { useAppTranslation } from '@/hooks/useTranslation';
-import { EventSimulator } from '@/components/organisms/EventSimulator/EventSimulator';
 
 export default function HomePage(): JSX.Element {
   const [showTx, setShowTx] = useState(false);
@@ -27,10 +26,15 @@ export default function HomePage(): JSX.Element {
   const { t } = useAppTranslation();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
-      <header className="flex w-full max-w-6xl items-center justify-between">
-        <Text variant="h4" className="font-semibold">
-          FarmCredit
+    <main
+      id="main-content"
+      className="flex min-h-screen flex-col items-center justify-center gap-8 p-8"
+    >
+      <div data-tour-id="hero-section" className="flex flex-col items-center gap-4 text-center">
+        <Badge variant="default">Powered by Stellar</Badge>
+        <Text variant="h1">FarmCredit</Text>
+        <Text variant="muted" className="max-w-md">
+          Decentralized agricultural credit platform built on the Stellar network.
         </Text>
         <Button asChild variant="default" size="sm">
           <Link href="/api-docs">API Docs</Link>
@@ -109,7 +113,7 @@ export default function HomePage(): JSX.Element {
             size="lg"
             className="w-full"
           >
-            <Link href="/credits/purchase">{t('home.purchaseCarbon')}</Link>
+            <Link href="/credits/purchase">Purchase Carbon Credits</Link>
           </Button>
           <Button asChild variant="outline" size="lg" className="w-full">
             <Link href="/api-docs">Explore API Documentation</Link>
@@ -141,7 +145,6 @@ export default function HomePage(): JSX.Element {
       </Card>
 
       <OnboardingTour />
-      <EventSimulator />
-    </div>
+    </main>
   );
 }
