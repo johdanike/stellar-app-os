@@ -1,6 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -13,32 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/molecules/Card';
-import { cn } from '@/lib/utils';
 import { hasCompletedOnboardingTour, requestOnboardingTourRestart } from '@/lib/onboardingTour';
 import { PreferencesSection } from '@/components/organisms/settings/PreferencesSection';
-import { cn } from '@/lib/utils';
-
-type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
-
-interface NavItem {
-  id: TabId;
-  label: string;
-  icon?: string;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { id: 'profile', label: 'Profile' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'preferences', label: 'Preferences' },
-  { id: 'danger', label: 'Delete Account' },
-];
-
-const SECTION_TITLES: Record<TabId, string> = {
-  profile: 'Profile',
-  notifications: 'Notifications',
-  preferences: 'Preferences',
-  danger: 'Delete Account',
-};
 
 type TabId = 'profile' | 'notifications' | 'preferences' | 'danger';
 
@@ -94,7 +69,7 @@ export default function SettingsPage(): ReactNode {
   };
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-10">
+    <main id="main-content" className="container mx-auto max-w-3xl px-4 py-10">
       <div className="mb-8">
         <Text variant="h2" as="h1" className="mb-2">
           Settings
@@ -185,6 +160,6 @@ export default function SettingsPage(): ReactNode {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

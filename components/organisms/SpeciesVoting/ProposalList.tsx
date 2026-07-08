@@ -34,18 +34,20 @@ const mockProposals: Proposal[] = [
  */
 
 import { useState, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
 } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
+import { useWalletContext } from '@/contexts/WalletContext';
 import {
   ProposalStatus,
   formatVotingTimeRemaining,
@@ -54,7 +56,6 @@ import {
   buildExecuteProposalTransaction,
   type ProposalRecord,
 } from '@/lib/stellar/species-voting';
-import { useWalletContext } from '@/contexts/WalletContext';
 import {
   ThumbsUp,
   ThumbsDown,
@@ -62,12 +63,11 @@ import {
   CheckCircle2,
   XCircle,
   PlayCircle,
-  Loader2,
-  AlertCircle,
-  Leaf,
   TreePine,
+  Leaf,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -85,14 +85,14 @@ const mockProposals: ProposalRecord[] = [
     id: 1,
     slug: 'mahogany',
     name: 'Mahogany',
-    co2_scaled: 2500,
+    co2_scaled: 2500n,
     maturity_years: 25,
     proposer: 'GABCD...',
     votes_for: 750000,
     votes_against: 50000,
     proposer: 'GABCD1234EFGH5678IJKL9012MNOP3456QRST7890UVWX1234YZ56',
-    votes_for: 750_000,
-    votes_against: 50_000,
+    votes_for: 750_000n,
+    votes_against: 50_000n,
     status: ProposalStatus.Active,
     created_at: Date.now() / 1000 - 86400 * 2,
     voting_ends_at: Date.now() / 1000 + 86400 * 5,
@@ -101,11 +101,11 @@ const mockProposals: ProposalRecord[] = [
     id: 2,
     slug: 'iroko',
     name: 'Iroko',
-    co2_scaled: 3400,
+    co2_scaled: 3400n,
     maturity_years: 40,
     proposer: 'GXYZ9876ABCD5432EFGH1098IJKL7654MNOP3210QRST9876UVWX',
-    votes_for: 320_000,
-    votes_against: 280_000,
+    votes_for: 320_000n,
+    votes_against: 280_000n,
     status: ProposalStatus.Active,
     created_at: Date.now() / 1000 - 86400 * 1,
     voting_ends_at: Date.now() / 1000 + 86400 * 6,
@@ -114,14 +114,14 @@ const mockProposals: ProposalRecord[] = [
     id: 3,
     slug: 'oak',
     name: 'Oak',
-    co2_scaled: 3000,
+    co2_scaled: 3000n,
     maturity_years: 30,
     proposer: 'GXYZ...',
     votes_for: 1200000,
     votes_against: 100000,
     proposer: 'GXYZ9876ABCD5432EFGH1098IJKL7654MNOP3210QRST9876UVWX',
-    votes_for: 1_200_000,
-    votes_against: 100_000,
+    votes_for: 1_200_000n,
+    votes_against: 100_000n,
     status: ProposalStatus.Passed,
     created_at: Date.now() / 1000 - 86400 * 10,
     voting_ends_at: Date.now() / 1000 - 86400 * 3,
@@ -348,7 +348,7 @@ function ProposalCard({ proposal, voteState, hasVoted, onVote, onExecute }: Prop
               CO₂ / year
             </span>
             <span className="text-sm font-semibold text-green-400">
-              {(proposal.co2_scaled / 100).toFixed(2)} kg
+              {(Number(proposal.co2_scaled) / 100).toFixed(2)} kg
             </span>
           </div>
           <div className="flex flex-col gap-0.5">
@@ -362,13 +362,13 @@ function ProposalCard({ proposal, voteState, hasVoted, onVote, onExecute }: Prop
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1.5 text-green-400 font-medium">
               <ThumbsUp className="h-3.5 w-3.5" aria-hidden="true" />
-              {proposal.votes_for.toLocaleString()} for
+              {Number(proposal.votes_for).toLocaleString()} for
             </span>
             <span className="text-white/40 text-[11px]">
-              {totalVotes > 0 ? `${totalVotes.toLocaleString()} total` : 'No votes yet'}
+              {totalVotes > 0n ? `${Number(totalVotes).toLocaleString()} total` : 'No votes yet'}
             </span>
             <span className="flex items-center gap-1.5 text-red-400 font-medium">
-              {proposal.votes_against.toLocaleString()} against
+              {Number(proposal.votes_against).toLocaleString()} against
               <ThumbsDown className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
           </div>

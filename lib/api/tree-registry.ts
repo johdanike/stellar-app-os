@@ -53,6 +53,7 @@ async function fetchHorizonTreeOps(): Promise<
 
       const treeId = `HRV-HORIZON-${payment.id.slice(-6)}`;
       result.set(treeId, {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         status: toTreeStatus((payment as any).transaction_attr?.memo as string | undefined),
         plantedAt: payment.created_at,
       });
