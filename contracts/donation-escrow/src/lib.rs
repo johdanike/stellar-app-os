@@ -2,8 +2,8 @@
 
 use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Env,
-    IntoVal, Vec,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token,
+    Address, Env, IntoVal, Vec,
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -14,6 +14,22 @@ const MAX_TREES: u32 = 50;
 /// XLM and USDC both use 7 decimals, but we normalize through this shared base
 /// so the contract can support additional tokens without changing callers.
 const COMMON_DECIMALS: u32 = 7;
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum DonationEscrowError {
+    UnsupportedToken = 82,
+    TokenAlreadyAccepted = 83,
+    AlreadyProcessed = 84,
+    AmountPerIntervalMustBePositive = 85,
+    IntervalSecondsMustBePositive = 86,
+    RecurringDonationNotFound = 87,
+    DonationCancelled = 88,
+    IntervalNotElapsed = 89,
+    ProjectNotRegistered = 90,
+    NotDonor = 91,
+    DonationAlreadyCancelled = 92,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -191,7 +207,7 @@ impl DonationEscrow {
                 .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
             if rec.status != DonationStatus::Pending {
-                panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+                panic_with_error!(&env, DonationEscrowError::AlreadyProcessed);
             }
 
             token::Client::new(&env, &rec.token).transfer(
@@ -222,7 +238,7 @@ impl DonationEscrow {
             .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if rec.status != DonationStatus::Pending {
-            panic_with_error!(&env, HarvestaError::AlreadyProcessed);
+            panic_with_error!(&env, DonationEscrowError::AlreadyProcessed);
         }
 
         token::Client::new(&env, &rec.token).transfer(
@@ -272,10 +288,10 @@ impl DonationEscrow {
         donor.require_auth();
 
         if amount_per_interval <= 0 {
-            panic_with_error!(&env, HarvestaError::AmountPerIntervalMustBePositive);
+            panic_with_error!(&env, DonationEscrowError::AmountPerIntervalMustBePositive);
         }
         if interval_seconds == 0 {
-            panic_with_error!(&env, HarvestaError::IntervalSecondsMustBePositive);
+            panic_with_error!(&env, DonationEscrowError::IntervalSecondsMustBePositive);
         }
 
         Self::assert_accepted_token(&env, &token);
@@ -325,22 +341,22 @@ impl DonationEscrow {
 
         let mut rec: RecurringDonation =
             env.storage().persistent().get(&key).unwrap_or_else(|| {
-                panic_with_error!(&env, HarvestaError::RecurringDonationNotFound)
+                panic_with_error!(&env, DonationEscrowError::RecurringDonationNotFound)
             });
 
         if rec.cancelled {
-            panic_with_error!(&env, HarvestaError::DonationCancelled);
+            panic_with_error!(&env, DonationEscrowError::DonationCancelled);
         }
 
         if env.ledger().timestamp() < rec.next_release {
-            panic_with_error!(&env, HarvestaError::IntervalNotElapsed);
+            panic_with_error!(&env, DonationEscrowError::IntervalNotElapsed);
         }
 
         let project: Address = env
             .storage()
             .instance()
             .get(&Self::project_key(&env, rec.project_id))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::ProjectNotRegistered));
+            .unwrap_or_else(|| panic_with_error!(&env, DonationEscrowError::ProjectNotRegistered));
 
         token::Client::new(&env, &rec.token).transfer(
             &env.current_contract_address(),
@@ -348,8 +364,15 @@ impl DonationEscrow {
             &rec.amount_per_interval,
         );
 
-        rec.next_release = rec.next_release.checked_add(rec.interval_seconds).expect("next release time overflow");
-        rec.total_released = rec.total_released.checked_add(rec.amount_per_interval).expect("total released overflow");
+        rec.next_release = rec
+            .next_release
+            .checked_add(rec.interval_seconds)
+            .expect("next release time overflow");
+        rec.total_released = rec
+            .total_released
+            .checked_add(rec.amount_per_interval)
+            .expect("total released overflow");
+        rec.total_released_normalized += rec.normalized_amount_per_interval;
 
         env.storage().persistent().set(&key, &rec);
 
@@ -372,15 +395,15 @@ impl DonationEscrow {
 
         let mut rec: RecurringDonation =
             env.storage().persistent().get(&key).unwrap_or_else(|| {
-                panic_with_error!(&env, HarvestaError::RecurringDonationNotFound)
+                panic_with_error!(&env, DonationEscrowError::RecurringDonationNotFound)
             });
 
         if rec.donor != donor {
-            panic_with_error!(&env, HarvestaError::NotDonor);
+            panic_with_error!(&env, DonationEscrowError::NotDonor);
         }
 
         if rec.cancelled {
-            panic_with_error!(&env, HarvestaError::DonationAlreadyCancelled);
+            panic_with_error!(&env, DonationEscrowError::DonationAlreadyCancelled);
         }
 
         rec.cancelled = true;
@@ -474,7 +497,7 @@ impl DonationEscrow {
 
     fn assert_accepted_token(env: &Env, token: &Address) {
         if !Self::is_accepted_token_internal(env, token) {
-            panic_with_error!(env, HarvestaError::UnsupportedToken);
+            panic_with_error!(env, DonationEscrowError::UnsupportedToken);
         }
     }
 
@@ -483,7 +506,7 @@ impl DonationEscrow {
         for i in 0..tokens.len() {
             if tokens.get(i).unwrap().token == *token_address {
                 if fail_on_duplicate {
-                    panic_with_error!(env, HarvestaError::TokenAlreadyAccepted);
+                    panic_with_error!(env, DonationEscrowError::TokenAlreadyAccepted);
                 }
                 return;
             }
@@ -507,7 +530,7 @@ impl DonationEscrow {
                 return Self::normalize_to_common_unit(amount, accepted.decimals);
             }
         }
-        panic_with_error!(env, HarvestaError::UnsupportedToken);
+        panic_with_error!(env, DonationEscrowError::UnsupportedToken);
     }
 
     fn load_accepted_tokens(env: &Env) -> Vec<AcceptedToken> {

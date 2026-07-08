@@ -3,11 +3,14 @@
 //! Shared error codes for all Harvesta / FarmCredit contracts.
 //!
 //! Import the crate, then call `panic_with_error!(env, HarvestaError::Variant)`
-//! instead of raw string panics.  Error codes are stable u32 values embedded in
-//! the Stellar XDR so off-chain tooling can parse them without string matching.
+//! instead of raw string panics. Error codes are stable `u32` values embedded
+//! in the Stellar XDR so off-chain tooling can parse them without string
+//! matching.
 //!
-//! NOTE: Error count reduced to stay within Soroban SDK limits.
-//! Only essential errors for current contracts are included.
+//! The contract suite has grown a lot, so this enum keeps the shared codes that
+//! are still used across multiple contracts. Contracts with overlapping
+//! domains, such as donation-escrow and tree-token, should define their own
+//! local `#[contracterror]` enums for contract-specific codes.
 
 use soroban_sdk::contracterror;
 
@@ -28,92 +31,58 @@ pub enum HarvestaError {
     // ── Amount / value validation (9–15) ──────────────────────────────────────
     AmountMustBePositive = 9,
     TreeCountMustBePositive = 10,
+    VerifiedCountMustBePositive = 11,
+    VerifiedCountExceedsDonation = 12,
     InvalidPayoutAmount = 13,
+    BurnAmountMustBePositive = 14,
     SlotAmountMustBePositive = 15,
 
     // ── Escrow state (16–25) ──────────────────────────────────────────────────
-    // EscrowAlreadyExists = 16,
-    // EscrowNotFound = 17,
-    // PlantingAlreadyVerified = 18,
-    // PlantingNotVerified = 19,
-    // RefundAfterPlanting = 20,
-    // SurvivalThresholdOutOfRange = 21,
-    // SurvivalRateOutOfRange = 22,
-    // SurvivalRateBelowMinimum = 23,
-    // SurvivalPeriodNotElapsed = 24,
-    // NothingToRelease = 25,
+    EscrowAlreadyExists = 16,
+    EscrowNotFound = 17,
+    PlantingAlreadyVerified = 18,
+    PlantingNotVerified = 19,
+    RefundAfterPlanting = 20,
+    SurvivalThresholdOutOfRange = 21,
+    SurvivalRateOutOfRange = 22,
+    SurvivalRateBelowMinimum = 23,
+    SurvivalPeriodNotElapsed = 24,
+    NothingToRelease = 25,
 
     // ── Oracle / tree co-fund (26–34) ─────────────────────────────────────────
-    // UnauthorizedOracle = 26,
-    // NoOracleReport = 27,
-    // BatchEmpty = 28,
-    // BatchTooLarge = 29,
-    // TreeAlreadyRegistered = 30,
-    // TreeNotRegistered = 31,
-    // TreeNotOpenForContributions = 32,
-    // TreeNotOpenForRelease = 33,
-    // NoFundsToRelease = 34,
+    UnauthorizedOracle = 26,
+    NoOracleReport = 27,
+    BatchEmpty = 28,
+    BatchTooLarge = 29,
+    TreeAlreadyRegistered = 30,
+    TreeNotRegistered = 31,
+    TreeNotOpenForContributions = 32,
+    TreeNotOpenForRelease = 33,
+    NoFundsToRelease = 34,
 
-    // ── Farmer registry (35–37, 65) ───────────────────────────────────────────
+    // ── Farmer registry (35–37) ───────────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
     FarmerNotRegistered = 36,
     InvalidRegion = 37,
-    /// Caller is not a registered validator — gated read/write denied.
-    NotValidator = 65,
-    /// The SHA-256 hash supplied by the caller does not match the one stored
-    /// on-chain for this farmer's identity document.
-    HashMismatch = 66,
 
-    // ── Dispute / arbiter (38–46) ─────────────────────────────────────────────
-    // DisputeAlreadyOpen = 38,
-    // NoOpenDispute = 39,
-    // EscrowAlreadyFinalised = 40,
-    // NotArbiter = 41,
-    // NotBuyerOrSeller = 42,
-    // MilestoneReleaseBlocked = 43,
-    // MilestoneAlreadyProcessed = 44,
-    // CompletionPercentageOutOfRange = 45,
-    // TotalReleasedExceedsMilestone = 46,
-
-    // ── Species registry (62–66) ──────────────────────────────────────────────
+    // ── Species registry (62–64, 69–70) ───────────────────────────────────────
     Co2MustBePositive = 62,
     MaturityYearsMustBePositive = 63,
     SpeciesNotFound = 64,
-    InvasiveSpecies = 65,
-    HighWaterUse = 66,
 
-    // ── Carbon marketplace (100–107) ───────────────────────────────────────────
-    ListingAmountMustBePositive = 100,
-    PriceMustBePositive = 101,
-    ListingNotFound = 102,
-    ListingNotActive = 103,
-    InsufficientLiquidity = 104,
-    BuyAmountMustBePositive = 105,
-    SelfTrade = 106,
-    InvalidPriceRange = 107,
-    InvalidDecayRate = 108,
-    InvalidDuration = 109,
-    AuctionNotFound = 110,
-    AuctionNotActive = 111,
-    AuctionExpired = 112,
-    BidBelowReservePrice = 113,
+    // ── Farmer registry validator gates (67–68) ──────────────────────────────
+    /// Caller is not a registered validator — gated read/write denied.
+    NotValidator = 67,
+    /// The SHA-256 hash supplied by the caller does not match the one stored
+    /// on-chain for this farmer's identity document.
+    HashMismatch = 68,
+
+    // ── Species registry gating (69–70) ───────────────────────────────────────
+    InvasiveSpecies = 69,
+    HighWaterUse = 70,
 
     // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
     TreeTokenMintOverflow = 80,
     TokenUnitOverflow = 81,
 
-    // ── Token whitelist / payment support (82–83) ────────────────────────────
-    UnsupportedToken = 82,
-    TokenAlreadyAccepted = 83,
-
-    // ── Donation escrow / recurring support (84–92) ─────────────────────────
-    AlreadyProcessed = 84,
-    AmountPerIntervalMustBePositive = 85,
-    IntervalSecondsMustBePositive = 86,
-    RecurringDonationNotFound = 87,
-    DonationCancelled = 88,
-    IntervalNotElapsed = 89,
-    ProjectNotRegistered = 90,
-    NotDonor = 91,
-    DonationAlreadyCancelled = 92,
 }
