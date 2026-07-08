@@ -10,10 +10,18 @@
 //! treeCount and co2OffsetKg metadata values.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Env, String,
-    Vec,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, Address,
+    Env, String, Vec,
 };
 use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum NftCertificateError {
+    TokenAlreadyMinted = 82,
+    TokenNotFound = 83,
+    MetadataMismatch = 84,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,7 +92,7 @@ impl NftCertificate {
 
         // Check if token already exists
         if env.storage().instance().has(&token_id) {
-            panic_with_error!(&env, HarvestaError::TokenAlreadyMinted);
+            panic_with_error!(&env, NftCertificateError::TokenAlreadyMinted);
         }
 
         let token = Token {
@@ -142,7 +150,7 @@ impl NftCertificate {
 
         // Check if new token ID already exists
         if env.storage().instance().has(&new_token_id) {
-            panic_with_error!(&env, HarvestaError::TokenAlreadyMinted);
+            panic_with_error!(&env, NftCertificateError::TokenAlreadyMinted);
         }
 
         let mut total_tree_count = 0i128;
@@ -156,7 +164,7 @@ impl NftCertificate {
                 .storage()
                 .instance()
                 .get(token_id)
-                .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::TokenNotFound));
+                .unwrap_or_else(|| panic_with_error!(&env, NftCertificateError::TokenNotFound));
 
             // Verify ownership
             if token.owner != owner {
@@ -176,11 +184,11 @@ impl NftCertificate {
 
         // Verify that the provided merged metadata matches the aggregated values
         if total_tree_count != merged_metadata.tree_count {
-            panic_with_error!(&env, HarvestaError::MetadataMismatch);
+            panic_with_error!(&env, NftCertificateError::MetadataMismatch);
         }
 
         if total_co2_offset != merged_metadata.co2_offset_kg {
-            panic_with_error!(&env, HarvestaError::MetadataMismatch);
+            panic_with_error!(&env, NftCertificateError::MetadataMismatch);
         }
 
         // Mint the new consolidated certificate

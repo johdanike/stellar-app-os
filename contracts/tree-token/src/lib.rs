@@ -35,9 +35,16 @@
 
 use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes,
-    BytesN, Env, IntoVal, Symbol,
+    contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token,
+    Address, Bytes, BytesN, Env, IntoVal, Symbol,
 };
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum TreeTokenError {
+    BurnAmountMustBePositive = 14,
+    NonceAlreadyUsed = 83,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -161,7 +168,7 @@ impl TreeToken {
         burner.require_auth();
 
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::BurnAmountMustBePositive);
+            panic_with_error!(&env, TreeTokenError::BurnAmountMustBePositive);
         }
 
         let tree_token: Address = env
@@ -249,7 +256,7 @@ impl TreeToken {
         let nk = nonce_storage_key(&env, &payload.from);
         let expected_nonce: u64 = env.storage().persistent().get(&nk).unwrap_or(0u64);
         if payload.nonce != expected_nonce {
-            panic_with_error!(&env, HarvestaError::NonceAlreadyUsed);
+            panic_with_error!(&env, TreeTokenError::NonceAlreadyUsed);
         }
 
         // ── 4. Signature verification ─────────────────────────────────────────

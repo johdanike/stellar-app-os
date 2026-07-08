@@ -36,6 +36,13 @@ use soroban_sdk::{
 };
 use admin_controls::AdminControlsClient;
 
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum FarmerPlotError {
+    InvalidCoordinatesCount = 150,
+    PlotAlreadyExists = 151,
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /// Full farmer profile stored under the validator-gated key.
@@ -430,12 +437,12 @@ impl FarmerRegistry {
 
         let len = coordinates.len();
         if len < 3 || len > 50 {
-            panic_with_error!(&env, HarvestaError::InvalidCoordinatesCount);
+            panic_with_error!(&env, FarmerPlotError::InvalidCoordinatesCount);
         }
 
         let plot_key = Self::plot_key(&env, &plot_id);
         if env.storage().persistent().has(&plot_key) {
-            panic_with_error!(&env, HarvestaError::PlotAlreadyExists);
+            panic_with_error!(&env, FarmerPlotError::PlotAlreadyExists);
         }
 
         let plot = FarmPlot {

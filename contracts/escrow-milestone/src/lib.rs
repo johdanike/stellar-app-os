@@ -32,6 +32,8 @@ pub enum MilestoneError {
     EscrowAlreadyFinalised = 54,
     NotArbiter = 55,
     NoOpenDispute = 56,
+    NotAVerifier = 57,
+    AlreadyVoted = 58,
 }
 
 /// Percentage released on first milestone verification (basis points: 7500 = 75%)
@@ -153,7 +155,7 @@ impl EscrowMilestone {
     ) {
         funder.require_auth();
         if amount <= 0 {
-            panic_with_error!(&env, HarvestaError::ValueMustBePositive);
+            panic_with_error!(&env, HarvestaError::AmountMustBePositive);
         }
 
         let key = Self::escrow_key(&env, &farmer);
@@ -588,13 +590,13 @@ impl EscrowMilestone {
 
         let is_registered = (0..verifiers.len()).any(|i| verifiers.get(i).unwrap() == verifier);
         if !is_registered {
-            panic_with_error!(&env, HarvestaError::NotAVerifier);
+            panic_with_error!(&env, MilestoneError::NotAVerifier);
         }
 
         let vote_key: soroban_sdk::Val = (Symbol::new(&env, "VOTE"), farmer.clone(), milestone_id, verifier.clone())
             .into_val(&env);
         if env.storage().persistent().has(&vote_key) {
-            panic_with_error!(&env, HarvestaError::AlreadyVoted);
+            panic_with_error!(&env, MilestoneError::AlreadyVoted);
         }
         env.storage().persistent().set(&vote_key, &true);
 
