@@ -41,13 +41,14 @@ pub struct VerifierStake {
     pub amount: i128,
     pub staked_at: u64,
     pub slashed: i128,
+    pub slashed_to_buffer_pool: i128,
 }
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
 #[contracttype]
 enum DataKey {
-    /// (admin, stake_token, min_stake_amount)
+    /// (admin, stake_token, min_stake_amount, replanting_buffer_pool)
     Config,
     /// Per-verifier stake record
     Stake(Address),
@@ -62,10 +63,19 @@ pub struct VerifierStaking;
 impl VerifierStaking {
     /// One-time initialisation.
     ///
-    /// * `admin`            — address authorised to slash bonds
-    /// * `stake_token`      — SAC token verifiers must stake
-    /// * `min_stake_amount` — minimum bond in token base units
-    pub fn initialize(env: Env, admin: Address, stake_token: Address, min_stake_amount: i128) {
+    /// * `admin`                     — address authorised to slash bonds
+    /// * `stake_token`               — SAC token verifiers must stake
+    /// * `min_stake_amount`          — minimum bond in token base units
+    /// * `governance_contract`       — governance contract for admin control
+    /// * `replanting_buffer_pool`    — address of replanting buffer pool contract
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        stake_token: Address,
+        min_stake_amount: i128,
+        governance_contract: Address,
+        replanting_buffer_pool: Address,
+    ) {
         if env.storage().instance().has(&DataKey::Config) {
             panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
@@ -74,7 +84,7 @@ impl VerifierStaking {
         }
         env.storage()
             .instance()
-            .set(&DataKey::Config, &(admin, stake_token, min_stake_amount));
+            .set(&DataKey::Config, &(admin, stake_token, min_stake_amount, governance_contract, replanting_buffer_pool));
     }
 
     /// Verifier locks `amount` of the stake token as their participation bond.
@@ -126,9 +136,10 @@ impl VerifierStaking {
     }
 
     /// Admin slashes `slash_amount` from a verifier's bond on proven fraud.
-    /// Slashed tokens remain in the contract (treasury / burn handled off-chain).
+    /// Slashed tokens are transferred to the replanting buffer pool contract.
+    /// This operation is gated by governance/admin control.
     pub fn slash(env: Env, verifier: Address, slash_amount: i128) {
-        let (admin, _, _) = Self::config(&env);
+        let (admin, _, _, governance_contract, replanting_buffer_pool) = Self::config(&env);
         admin.require_auth();
 
         if slash_amount <= 0 {
@@ -148,10 +159,19 @@ impl VerifierStaking {
 
         rec.amount -= slash_amount;
         rec.slashed += slash_amount;
+        rec.slashed_to_buffer_pool += slash_amount;
         env.storage().persistent().set(&key, &rec);
+
+        // Transfer slashed tokens to the replanting buffer pool
+        if slash_amount > 0 {
+            let token = token::Client::new(&env, &rec.token);
+            token.transfer(&env.current_contract_address(), &replanting_buffer_pool, &slash_amount);
+        }
 
         env.events()
             .publish((symbol_short!("slashed"), verifier), slash_amount);
+        env.events()
+            .publish((symbol_short!("slashed_to_buffer"), verifier), slash_amount);
     }
 
     /// Verifier withdraws their remaining bond and exits the verifier role.
@@ -159,7 +179,7 @@ impl VerifierStaking {
         verifier.require_auth();
 
         let key = DataKey::Stake(verifier.clone());
-        let rec: VerifierStake = env
+        let mut rec: VerifierStake = env
             .storage()
             .persistent()
             .get(&key)
@@ -197,15 +217,36 @@ impl VerifierStaking {
             .get(&DataKey::Stake(verifier))
     }
 
+    /// Returns the total slashed amount transferred to the buffer pool for a verifier.
+    pub fn get_slashed_to_buffer_pool(env: Env, verifier: Address) -> i128 {
+        let rec = match env.storage().persistent().get(&DataKey::Stake(verifier)) {
+            Some(record) => record,
+            None => return 0,
+        };
+        rec.slashed_to_buffer_pool
+    }
+
     /// Returns the configured minimum stake amount.
     pub fn get_min_stake(env: Env) -> i128 {
-        let (_, _, min_stake) = Self::config(&env);
+        let (_, _, min_stake, _, _) = Self::config(&env);
         min_stake
+    }
+
+    /// Returns the governance contract address.
+    pub fn get_governance_contract(env: Env) -> Address {
+        let (_, _, _, governance_contract, _) = Self::config(&env);
+        governance_contract
+    }
+
+    /// Returns the replanting buffer pool address.
+    pub fn get_replanting_buffer_pool(env: Env) -> Address {
+        let (_, _, _, _, replanting_buffer_pool) = Self::config(&env);
+        replanting_buffer_pool
     }
 
     // ── internal ──────────────────────────────────────────────────────────────
 
-    fn config(env: &Env) -> (Address, Address, i128) {
+    fn config(env: &Env) -> (Address, Address, i128, Address, Address) {
         env.storage()
             .instance()
             .get(&DataKey::Config)
@@ -218,7 +259,7 @@ impl VerifierStaking {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, token, Address, Env};
+    use soroban_sdk::{testutils::Address as _, token, Address, Env, token::Client};
 
     struct Ctx {
         env: Env,
@@ -229,10 +270,10 @@ mod tests {
     }
 
     fn setup() -> Ctx {
-        setup_with_min(1_000)
+        setup_with_min(1_000, Address::generate(&Env::default()), Address::generate(&Env::default()))
     }
 
-    fn setup_with_min(min_stake: i128) -> Ctx {
+    fn setup_with_min(min_stake: i128, governance: Address, buffer_pool: Address) -> Ctx {
         let env = Env::default();
         env.mock_all_auths();
 
@@ -246,7 +287,7 @@ mod tests {
             .address();
 
         token::StellarAssetClient::new(&env, &token).mint(&verifier, &10_000);
-        client.initialize(&admin, &token, &min_stake);
+        client.initialize(&admin, &token, &min_stake, &governance, &buffer_pool);
 
         Ctx { env, admin, verifier, token, client }
     }
@@ -346,6 +387,7 @@ mod tests {
         let rec = ctx.client.get_stake(&ctx.verifier).unwrap();
         assert_eq!(rec.amount, 1_200);
         assert_eq!(rec.slashed, 800);
+        assert_eq!(rec.slashed_to_buffer_pool, 800);
     }
 
     #[test]
@@ -357,6 +399,20 @@ mod tests {
         let rec = ctx.client.get_stake(&ctx.verifier).unwrap();
         assert_eq!(rec.amount, 0);
         assert_eq!(rec.slashed, 1_000);
+        assert_eq!(rec.slashed_to_buffer_pool, 1_000);
+    }
+
+    #[test]
+    fn test_slash_transfers_to_buffer_pool() {
+        let ctx = setup();
+        let buffer_pool = ctx.client.get_replanting_buffer_pool(&ctx.env);
+        let pre_balance = token::Client::new(&ctx.env, &ctx.token).balance(&buffer_pool);
+        
+        ctx.client.stake(&ctx.verifier, &2_000);
+        ctx.client.slash(&ctx.verifier, &800);
+
+        let post_balance = token::Client::new(&ctx.env, &ctx.token).balance(&buffer_pool);
+        assert_eq!(post_balance, pre_balance + 800);
     }
 
     #[test]
