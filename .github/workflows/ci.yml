@@ -138,6 +138,11 @@ jobs:
           restore-keys: |
             nextjs-${{ runner.os }}-
 
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      - run: pnpm build
       - name: Build
         run: pnpm build
         env:

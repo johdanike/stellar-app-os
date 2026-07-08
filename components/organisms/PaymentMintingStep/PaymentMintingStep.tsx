@@ -1,6 +1,8 @@
 'use client';
 
 import { Text } from '@/components/atoms/Text';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { PaymentMintingProps, TransactionStatus } from '@/lib/types/payment';
 
 // Re-export surface types from the canonical source so adjacent files
@@ -17,7 +19,20 @@ export type { PaymentMintingProps, TransactionStatus };
  * page. This component is intentionally presentational — it accepts
  * no props and exposes no hooks.
  */
-export function PaymentMintingStep() {
+
+export function PaymentMintingStep({
+  error,
+  status,
+  hasInsufficientBalance,
+  selection,
+  wallet,
+  selectedProject,
+  handleSignTransaction,
+  canProceed,
+  isProcessing,
+  setError,
+  setStatus,
+}: any) {
   return (
     <div className="space-y-6">
       <div>
@@ -119,7 +134,11 @@ export function PaymentMintingStep() {
 
       <div className="space-y-4">
         {status !== 'idle' && status !== 'error' && (
-          <div className="rounded-lg border border-stellar-blue/30 bg-stellar-blue/5 p-4">
+          <div
+            className="rounded-lg border border-stellar-blue/30 bg-stellar-blue/5 p-4"
+            role="status"
+            aria-live="polite"
+          >
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0">
                 {status === 'preparing' && (
