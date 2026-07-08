@@ -1,4 +1,4 @@
-import { TransactionBuilder, Asset, Operation, Memo, hash } from '@stellar/stellar-sdk';
+import { TransactionBuilder, Asset, Operation, Memo, hash, BASE_FEE } from '@stellar/stellar-sdk';
 import { Horizon } from '@stellar/stellar-sdk';
 import type { NetworkType } from '@/lib/types/wallet';
 import type {
@@ -8,6 +8,11 @@ import type {
 } from '@/lib/types/carbon';
 import { calculateDonationAllocation } from '@/lib/constants/donation';
 import { networkConfig } from '@/lib/config/network';
+import { getTreeAsset } from './tree-asset';
+import { getRegionPlanterAddresses } from './region-pools';
+
+// Re-export so callers can import TREE asset helper from this module
+export { getTreeAsset };
 
 export function getNetworkPassphrase(_network?: NetworkType): string {
   return networkConfig.networkPassphrase;
@@ -38,7 +43,10 @@ export async function buildPaymentTransaction(
   const usdcAsset = getUsdcAsset(network);
   const recipientAddress = networkConfig.addresses.bulkRecipient;
 
-  // Dev version: Only process payment, skip carbon credit minting (no asset exists yet)
+  // Payment transaction: transfers USDC to the platform's bulk-recipient address.
+  // TREE token minting (one TREE per credit purchased) is performed server-side
+  // via buildTreeMintTransaction() in lib/stellar/tree-token.ts once this
+  // transaction is confirmed on-chain.
   const transaction = new TransactionBuilder(sourceAccount, {
     fee: '100',
     networkPassphrase,
@@ -142,6 +150,8 @@ export async function buildDonationTransaction(
   network: NetworkType,
   idempotencyKey: string,
   treeCount = 1
+  treeCount = 1,
+  regionId?: string
 ): Promise<{ transactionXdr: string; networkPassphrase: string }> {
   if (amount <= 0) {
     throw new Error('Donation amount must be greater than zero');
@@ -155,10 +165,12 @@ export async function buildDonationTransaction(
   const sourceAccount = await server.loadAccount(sourcePublicKey);
   const usdcAsset = getUsdcAsset(network);
 
-  const plantingAddress = networkConfig.addresses.planting;
+  const builder = new TransactionBuilder(sourceAccount, {
+    fee: BASE_FEE,
+    networkPassphrase,
+  });
 
-  // Split: 70% to planting, 30% to replanting buffer fund
-  const { planting, buffer } = calculateDonationAllocation(amount);
+  const regionPlanterAddresses = getRegionPlanterAddresses(regionId);
 
   const builder = new TransactionBuilder(sourceAccount, {
     fee: baseFee,
@@ -170,6 +182,28 @@ export async function buildDonationTransaction(
     const { planting, buffer } = calculateDonationAllocation(amount);
     builder
       .addOperation(
+  // Add two operations per tree: 70% planting + 30% buffer
+  for (let i = 0; i < treeCount; i++) {
+    const { planting, buffer } = calculateDonationAllocation(amount);
+
+    if (regionPlanterAddresses.length > 0) {
+      const planterCount = regionPlanterAddresses.length;
+      const baseShare = Math.floor((planting / planterCount) * 1e7) / 1e7;
+
+      for (let j = 0; j < planterCount; j += 1) {
+        const amountForPlanter =
+          j === 0 ? parseFloat((planting - baseShare * (planterCount - 1)).toFixed(7)) : baseShare;
+
+        builder.addOperation(
+          Operation.payment({
+            destination: regionPlanterAddresses[j],
+            asset: usdcAsset,
+            amount: amountForPlanter.toFixed(7),
+          })
+        );
+      }
+    } else {
+      builder.addOperation(
         Operation.payment({
           destination: PLANTING_ADDRESS,
           asset: usdcAsset,
@@ -183,6 +217,16 @@ export async function buildDonationTransaction(
           amount: buffer.toFixed(7),
         })
       );
+      );
+    }
+
+    builder.addOperation(
+      Operation.payment({
+        destination: REPLANTING_BUFFER_ADDRESS,
+        asset: usdcAsset,
+        amount: buffer.toFixed(7),
+      })
+    );
   }
 
   const transaction = builder

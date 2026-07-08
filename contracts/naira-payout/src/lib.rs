@@ -16,9 +16,23 @@
 //!      confirms NGN delivery, recording the completion on-chain.
 //!   5. Admin may call `cancel_payout(farmer)` before confirmation if needed.
 
+use harvesta_errors::HarvestaError;
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, IntoVal,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, token,
+    Address, BytesN, Env, IntoVal, Symbol,
 };
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum NairaPayoutError {
+    ExpectedNgnMustBePositive = 45,
+    PendingPayoutAlreadyExists = 47,
+    PayoutIntervalTooShort = 48,
+    MaxDailyPayoutExceeded = 49,
+    PayoutNotPending = 50,
+    CanOnlyCancelPending = 51,
+    PayoutNotFound = 52,
+}
 
 /// Off-ramp delivery method for Nigerian Naira.
 #[contracttype]
@@ -71,9 +85,15 @@ pub struct NairaPayout;
 impl NairaPayout {
     /// One-time setup: register the admin and the anchor's on-chain
     /// withdrawal address (the Stellar account operated by the anchor).
-    pub fn initialize(env: Env, admin: Address, anchor_withdrawal: Address) {
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        anchor_withdrawal: Address,
+        min_interval_secs: u64,
+        max_daily_payout: i128,
+    ) {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
-            panic!("already initialized");
+            panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
         env.storage()
             .instance()
@@ -81,6 +101,12 @@ impl NairaPayout {
         env.storage()
             .instance()
             .set(&symbol_short!("ANCHOR"), &anchor_withdrawal);
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "MinIntervalSecs"), &min_interval_secs);
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "MaxDailyPayout"), &max_daily_payout);
     }
 
     /// Initiate a USDC/XLM → NGN payout for a farmer.
@@ -106,25 +132,65 @@ impl NairaPayout {
         funder.require_auth();
 
         if usdc_amount <= 0 {
-            panic!("amount must be positive");
+            panic_with_error!(&env, HarvestaError::AmountMustBePositive);
         }
         if expected_ngn_amount <= 0 {
-            panic!("expected NGN amount must be positive");
+            panic_with_error!(&env, NairaPayoutError::ExpectedNgnMustBePositive);
+        }
+
+        let min_interval: u64 = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "MinIntervalSecs"))
+            .unwrap_or(0);
+        let max_daily: i128 = env
+            .storage()
+            .instance()
+            .get(&Symbol::new(&env, "MaxDailyPayout"))
+            .unwrap_or(0);
+
+        let now = env.ledger().timestamp();
+
+        let last_payout_key: soroban_sdk::Val =
+            (Symbol::new(&env, "LastPayoutTime"), farmer.clone()).into_val(&env);
+        if env.storage().persistent().has(&last_payout_key) {
+            let last_payout_time: u64 = env.storage().persistent().get(&last_payout_key).unwrap();
+            if now < last_payout_time + min_interval {
+                panic_with_error!(&env, NairaPayoutError::PayoutIntervalTooShort);
+            }
+        }
+
+        let daily_total_key = Symbol::new(&env, "DailyPayoutTotal");
+        let (mut current_total, last_reset_day): (i128, u64) = env
+            .storage()
+            .instance()
+            .get(&daily_total_key)
+            .unwrap_or((0, 0));
+
+        let current_day = now.checked_div(86400).expect("day calculation overflow");
+        if current_day > last_reset_day {
+            current_total = 0;
+        }
+
+        if current_total + usdc_amount > max_daily {
+            panic_with_error!(&env, NairaPayoutError::MaxDailyPayoutExceeded);
         }
 
         let key = Self::payout_key(&env, &farmer);
         if env.storage().persistent().has(&key) {
             let existing: PayoutRecord = env.storage().persistent().get(&key).unwrap();
             if existing.status == PayoutStatus::Pending {
-                panic!("pending payout already exists for this farmer");
+                panic_with_error!(&env, NairaPayoutError::PendingPayoutAlreadyExists);
             }
         }
+
+        contract_utils::assert_whitelisted(&env, &token);
 
         let anchor: Address = env
             .storage()
             .instance()
             .get(&symbol_short!("ANCHOR"))
-            .expect("contract not initialized");
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
 
         token::Client::new(&env, &token).transfer(&funder, &anchor, &usdc_amount);
 
@@ -137,12 +203,17 @@ impl NairaPayout {
             off_ramp_method,
             off_ramp_ref_hash,
             status: PayoutStatus::Pending,
-            initiated_at: env.ledger().timestamp(),
+            initiated_at: now,
             completed_at: 0,
             anchor_tx_id: BytesN::from_array(&env, &[0u8; 32]),
         };
 
         env.storage().persistent().set(&key, &record);
+        env.storage().persistent().set(&last_payout_key, &now);
+        env.storage().instance().set(
+            &daily_total_key,
+            &(current_total.checked_add(usdc_amount).expect("daily total update overflow"), current_day),
+        );
 
         env.events().publish(
             (symbol_short!("initpay"), farmer),
@@ -160,10 +231,10 @@ impl NairaPayout {
             .storage()
             .persistent()
             .get(&key)
-            .expect("no payout found for farmer");
+            .unwrap_or_else(|| panic_with_error!(&env, NairaPayoutError::PayoutNotFound));
 
         if record.status != PayoutStatus::Pending {
-            panic!("payout is not in pending state");
+            panic_with_error!(&env, NairaPayoutError::PayoutNotPending);
         }
 
         record.status = PayoutStatus::Completed;
@@ -187,10 +258,10 @@ impl NairaPayout {
             .storage()
             .persistent()
             .get(&key)
-            .expect("no payout found for farmer");
+            .unwrap_or_else(|| panic_with_error!(&env, NairaPayoutError::PayoutNotFound));
 
         if record.status != PayoutStatus::Pending {
-            panic!("can only cancel a pending payout");
+            panic_with_error!(&env, NairaPayoutError::CanOnlyCancelPending);
         }
 
         record.status = PayoutStatus::Cancelled;
@@ -207,6 +278,32 @@ impl NairaPayout {
             .get(&Self::payout_key(&env, &farmer))
     }
 
+    pub fn update_limits(env: Env, min_interval_secs: u64, max_daily_payout: i128) {
+        Self::require_admin(&env);
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "MinIntervalSecs"), &min_interval_secs);
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "MaxDailyPayout"), &max_daily_payout);
+    }
+
+    pub fn reset_daily_payout(env: Env) {
+        Self::require_admin(&env);
+        let now = env.ledger().timestamp();
+        env.storage().instance().set(
+            &Symbol::new(&env, "DailyPayoutTotal"),
+            &(0i128, now.checked_div(86400).expect("day calculation overflow")),
+        );
+    }
+
+    pub fn reset_address_payout_time(env: Env, address: Address) {
+        Self::require_admin(&env);
+        let last_payout_key: soroban_sdk::Val =
+            (Symbol::new(&env, "LastPayoutTime"), address).into_val(&env);
+        env.storage().persistent().remove(&last_payout_key);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     fn payout_key(env: &Env, farmer: &Address) -> soroban_sdk::Val {
@@ -218,8 +315,32 @@ impl NairaPayout {
             .storage()
             .instance()
             .get(&symbol_short!("ADMIN"))
-            .expect("contract not initialized");
+            .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized));
         admin.require_auth();
+    }
+
+    // ── Whitelist management ──────────────────────────────────────────────────
+
+    /// Add `addr` to the contract whitelist. Restricted to admin.
+    pub fn add_to_whitelist(env: Env, addr: Address) {
+        Self::require_admin(&env);
+        contract_utils::add_to_whitelist(&env, &addr);
+    }
+
+    /// Remove `addr` from the contract whitelist. Restricted to admin.
+    pub fn remove_from_whitelist(env: Env, addr: Address) {
+        Self::require_admin(&env);
+        contract_utils::remove_from_whitelist(&env, &addr);
+    }
+
+    /// Returns `true` if `addr` is whitelisted.
+    pub fn is_whitelisted(env: Env, addr: Address) -> bool {
+        contract_utils::is_whitelisted(&env, &addr)
+    }
+
+    /// Panics if `addr` is not whitelisted.
+    pub fn assert_whitelisted(env: Env, addr: Address) {
+        contract_utils::assert_whitelisted(&env, &addr);
     }
 }
 
@@ -246,6 +367,7 @@ mod tests {
     fn setup() -> Ctx {
         let env = Env::default();
         env.mock_all_auths();
+        env.ledger().with_mut(|l| l.timestamp = 1);
 
         let contract_id = env.register_contract(None, NairaPayout);
         let client = NairaPayoutClient::new(&env, &contract_id);
@@ -260,7 +382,8 @@ mod tests {
             .address();
         token::StellarAssetClient::new(&env, &token_id).mint(&funder, &100_000);
 
-        client.initialize(&admin, &anchor);
+        client.initialize(&admin, &anchor, &0, &1_000_000_000);
+        client.add_to_whitelist(&token_id);
 
         Ctx {
             env,
@@ -296,13 +419,12 @@ mod tests {
         assert_eq!(balance(&env, &token, &funder), 100_000);
         assert_eq!(balance(&env, &token, &anchor), 0);
 
-        // Initiate: transfer 10 USDC to anchor, record ≈ ₦16,000 expected NGN
         client.initiate_payout(
             &funder,
             &farmer,
             &token,
             &10_000,
-            &16_000_000, // NGN kobo-equivalent at ~1600 NGN/USDC
+            &16_000_000,
             &OffRampMethod::MobileMoney,
             &dummy_hash(&env, 1),
         );
@@ -315,6 +437,9 @@ mod tests {
         assert_eq!(record.usdc_amount, 10_000);
         assert_eq!(record.expected_ngn_amount, 16_000_000);
         assert_eq!(record.off_ramp_method, OffRampMethod::MobileMoney);
+
+        // Advance ledger so the confirmation timestamp is non-zero.
+        env.ledger().with_mut(|l| l.timestamp = 1_700_000_000);
 
         // Confirm: anchor delivered NGN
         client.confirm_payout(&farmer, &dummy_hash(&env, 2));
@@ -399,7 +524,6 @@ mod tests {
         );
         client.cancel_payout(&farmer);
 
-        // Second payout should succeed after cancellation
         client.initiate_payout(
             &funder,
             &farmer,
@@ -416,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "amount must be positive")]
+    #[should_panic(expected = "Error(Contract, #9)")]
     fn test_zero_amount_rejected() {
         let Ctx {
             env,
@@ -438,7 +562,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "pending payout already exists")]
+    #[should_panic(expected = "Error(Contract, #47)")]
     fn test_duplicate_pending_payout_rejected() {
         let Ctx {
             env,
@@ -469,7 +593,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "payout is not in pending state")]
+    #[should_panic(expected = "Error(Contract, #50)")]
     fn test_double_confirm_rejected() {
         let Ctx {
             env,
@@ -493,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "can only cancel a pending payout")]
+    #[should_panic(expected = "Error(Contract, #51)")]
     fn test_cancel_completed_rejected() {
         let Ctx {
             env,
@@ -514,5 +638,116 @@ mod tests {
         );
         client.confirm_payout(&farmer, &dummy_hash(&env, 2));
         client.cancel_payout(&farmer);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #48)")]
+    fn test_rate_limit_per_address() {
+        let Ctx {
+            env,
+            client,
+            funder,
+            farmer,
+            token,
+            ..
+        } = setup();
+
+        client.update_limits(&3600, &50_000);
+
+        client.initiate_payout(
+            &funder,
+            &farmer,
+            &token,
+            &5_000,
+            &8_000_000,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+
+        client.initiate_payout(
+            &funder,
+            &farmer,
+            &token,
+            &5_000,
+            &8_000_000,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #49)")]
+    fn test_global_rate_limit() {
+        let Ctx {
+            env,
+            client,
+            funder,
+            token,
+            ..
+        } = setup();
+
+        client.update_limits(&0, &10_000);
+
+        let farmer1 = Address::generate(&env);
+        let farmer2 = Address::generate(&env);
+
+        client.initiate_payout(
+            &funder,
+            &farmer1,
+            &token,
+            &6_000,
+            &9_600_000,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+
+        client.initiate_payout(
+            &funder,
+            &farmer2,
+            &token,
+            &5_000,
+            &8_000_000,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 2),
+        );
+    }
+
+    #[test]
+    fn test_admin_reset_limits() {
+        let Ctx {
+            env,
+            client,
+            funder,
+            farmer,
+            token,
+            ..
+        } = setup();
+
+        client.update_limits(&3600, &50_000);
+
+        client.initiate_payout(
+            &funder,
+            &farmer,
+            &token,
+            &5_000,
+            &8_000_000,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+
+        client.cancel_payout(&farmer);
+        client.reset_address_payout_time(&farmer);
+
+        client.initiate_payout(
+            &funder,
+            &farmer,
+            &token,
+            &5_000,
+            &8_000_000,
+            &OffRampMethod::MobileMoney,
+            &dummy_hash(&env, 1),
+        );
+
+        client.reset_daily_payout();
     }
 }

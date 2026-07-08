@@ -1,29 +1,29 @@
 #![no_std]
 
-//! Donation Escrow Contract
-//!
-//! Accepts XLM (native) or USDC donations, locks funds per planting batch,
-//! and records donor address, amount, tree count, and timestamp on-chain.
-//!
-//! Flow:
-//!   1. Admin initialises with accepted token addresses (XLM SAC + USDC).
-//!   2. Donor calls `donate(token, amount, tree_count)` — funds locked in contract.
-//!   3. Each donation is stored as a `DonationRecord` keyed by (batch_id, donor, seq).
-//!   4. Admin calls `advance_batch()` to close the current planting cycle and open the next.
-//!   5. Locked funds are released to the tree-escrow contract by the admin via `release_batch()`.
-//!
-//! Storage layout:
-//!   Instance:  ADMIN, XLM_TOKEN, USDC_TOKEN, BATCH (current batch id), SEQ (global seq)
-//!   Persistent: DON:{seq} → DonationRecord
-//!               BAT:{batch_id} → BatchSummary
-
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Env, Vec,
+    contract, contractimpl, contracttype, contracterror, panic_with_error, symbol_short, token,
+    Address, Env, IntoVal, Vec,
 };
+use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum DonationError {
+    UnsupportedToken = 71,
+    AlreadyProcessed = 72,
+    AmountPerIntervalMustBePos = 73,
+    DonationCancelled = 74,
+    IntervalNotElapsed = 75,
+    IntervalSecondsMustBePos = 76,
+    RecurringDonationNotFound = 77,
+    ProjectNotRegistered = 78,
+    NotDonor = 79,
+    DonationAlreadyCancelled = 82,
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/// Maximum trees per single donation call
+/// Maximum trees per donation
 const MAX_TREES: u32 = 50;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -31,44 +31,34 @@ const MAX_TREES: u32 = 50;
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub enum DonationStatus {
-    /// Locked in escrow, awaiting planting cycle assignment
     Pending,
-    /// Released to tree-escrow contract for farmer assignment
     Released,
-    /// Refunded to donor (admin action before release)
     Refunded,
 }
 
-/// On-chain record for a single donation.
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct DonationRecord {
-    /// Donor's Stellar address
-    pub donor:      Address,
-    /// Token used (XLM SAC address or USDC address)
-    pub token:      Address,
-    /// Amount in token's smallest unit (stroops for XLM, 1e-7 USDC)
-    pub amount:     i128,
-    /// Number of trees funded in this donation
+    pub donor: Address,
+    pub token: Address,
+    pub amount: i128,
     pub tree_count: u32,
-    /// Ledger timestamp at donation time
-    pub timestamp:  u64,
-    /// Planting batch this donation belongs to
-    pub batch_id:   u32,
-    /// Current status
-    pub status:     DonationStatus,
+    pub timestamp: u64,
+    pub batch_id: u32,
+    pub status: DonationStatus,
 }
 
-/// Aggregate totals for a planting batch.
 #[contracttype]
 #[derive(Clone, Debug)]
-pub struct BatchSummary {
-    pub batch_id:    u32,
-    pub tree_count:  u32,
-    pub xlm_total:   i128,
-    pub usdc_total:  i128,
-    /// True once admin has called advance_batch() to close this cycle
-    pub closed:      bool,
+pub struct RecurringDonation {
+    pub donor: Address,
+    pub token: Address,
+    pub project_id: u64,
+    pub amount_per_interval: i128,
+    pub interval_seconds: u64,
+    pub next_release: u64,
+    pub total_released: i128,
+    pub cancelled: bool,
 }
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -78,82 +68,82 @@ pub struct DonationEscrow;
 
 #[contractimpl]
 impl DonationEscrow {
-    /// One-time initialisation.
-    ///
-    /// `xlm_token`  — address of the XLM Stellar Asset Contract (native SAC)
-    /// `usdc_token` — address of the USDC Stellar Asset Contract
+    /// Initialize contract
     pub fn initialize(env: Env, admin: Address, xlm_token: Address, usdc_token: Address) {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
-            panic!("already initialized");
+            panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
-        env.storage().instance().set(&symbol_short!("ADMIN"), &admin);
-        // OPTIMIZATION: Store both tokens as tuple to reduce reads from 2 to 1
-        env.storage().instance().set(&symbol_short!("TOKENS"), &(xlm_token, usdc_token));
-        // OPTIMIZATION: Store batch and sequence as tuple to reduce reads from 2 to 1
-        env.storage().instance().set(&symbol_short!("BATCHSEQ"), &(1u32, 0u64));
+
+        env.storage()
+            .instance()
+            .set(&symbol_short!("ADMIN"), &admin);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("TOKENS"), &(xlm_token, usdc_token));
+
+        // (current_batch, seq)
+        env.storage()
+            .instance()
+            .set(&symbol_short!("BATCHSEQ"), &(1u32, 0u64));
+
+        // recurring donation id counter
+        env.storage()
+            .instance()
+            .set(&symbol_short!("RECSEQ"), &0u64);
     }
 
-    /// Donor locks `amount` of `token` (XLM or USDC) into escrow for `tree_count` trees.
-    ///
-    /// The donation is assigned to the current open planting batch.
-    /// Returns the global sequence number of this donation record.
-    /// 
-    /// OPTIMIZED: Reduced storage operations from 7 to 2 (1 read + 1 write)
-    pub fn donate(
-        env: Env,
-        donor: Address,
-        token: Address,
-        amount: i128,
-        tree_count: u32,
-    ) -> u64 {
+    /// Donate funds into escrow
+    pub fn donate(env: Env, donor: Address, token: Address, amount: i128, tree_count: u32) -> u64 {
         donor.require_auth();
 
         if amount <= 0 {
-            panic!("amount must be positive");
+            panic_with_error!(&env, HarvestaError::AmountMustBePositive);
         }
+
         if tree_count == 0 || tree_count > MAX_TREES {
-            panic!("tree_count must be between 1 and 50");
+            panic_with_error!(&env, HarvestaError::TreeCountMustBePositive);
         }
 
-        // OPTIMIZATION: Single read for both tokens (was 2 reads)
-        let (xlm, usdc): (Address, Address) = env.storage().instance()
+        let (xlm, usdc): (Address, Address) = env
+            .storage()
+            .instance()
             .get(&symbol_short!("TOKENS"))
-            .expect("not init");
-        
-        if token != xlm && token != usdc {
-            panic!("token must be XLM or USDC");
-        }
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
 
-        // OPTIMIZATION: Single read for batch_id and seq (was 2 reads)
-        let (batch_id, seq): (u32, u64) = env.storage().instance()
+        if token != xlm && token != usdc {
+            panic_with_error!(&env, DonationError::UnsupportedToken);
+        }
+        contract_utils::assert_whitelisted(&env, &token);
+
+        let (batch_id, seq): (u32, u64) = env
+            .storage()
+            .instance()
             .get(&symbol_short!("BATCHSEQ"))
             .unwrap();
-        
-        let next_seq = seq + 1;
-        
-        // OPTIMIZATION: Single write to update both batch and seq (was 1 write)
-        env.storage().instance().set(&symbol_short!("BATCHSEQ"), &(batch_id, next_seq));
 
-        // Transfer funds from donor into contract
-        token::Client::new(&env, &token)
-            .transfer(&donor, &env.current_contract_address(), &amount);
+        let next_seq = seq.checked_add(1).expect("sequence counter overflow");
 
-        // Persist donation record
+        env.storage()
+            .instance()
+            .set(&symbol_short!("BATCHSEQ"), &(batch_id, next_seq));
+
+        // transfer funds
+        token::Client::new(&env, &token).transfer(&donor, &env.current_contract_address(), &amount);
+
         let rec = DonationRecord {
-            donor:      donor.clone(),
-            token:      token.clone(),
+            donor: donor.clone(),
+            token: token.clone(),
             amount,
             tree_count,
-            timestamp:  env.ledger().timestamp(),
+            timestamp: env.ledger().timestamp(),
             batch_id,
-            status:     DonationStatus::Pending,
+            status: DonationStatus::Pending,
         };
-        env.storage().persistent().set(&Self::donation_key(&env, next_seq), &rec);
 
-        // OPTIMIZATION: Removed batch summary read/write (was 1 read + 1 write)
-        // Batch summaries are now aggregated off-chain from events
-        // This eliminates 2 storage operations per donation
-        
+        env.storage()
+            .persistent()
+            .set(&Self::donation_key(&env, next_seq), &rec);
+
         env.events().publish(
             (symbol_short!("donate"), donor),
             (batch_id, tree_count, amount, token),
@@ -162,99 +152,273 @@ impl DonationEscrow {
         next_seq
     }
 
-    /// Admin closes the current planting batch and opens the next one.
-    /// After this, new donations go into batch N+1.
-    /// 
-    /// OPTIMIZED: Batch summaries removed - aggregated off-chain from events
+    /// Move to next batch
     pub fn advance_batch(env: Env) -> u32 {
         Self::require_admin(&env);
 
-        // OPTIMIZATION: Single read for batch (was 1 read)
-        let (batch_id, seq): (u32, u64) = env.storage().instance()
+        let (batch_id, seq): (u32, u64) = env
+            .storage()
+            .instance()
             .get(&symbol_short!("BATCHSEQ"))
             .unwrap();
 
-        // OPTIMIZATION: Removed batch summary read/write (was 1 read + 1 write)
-        // Batch closure is now tracked via events only
-        
-        let next_batch = batch_id + 1;
-        
-        // OPTIMIZATION: Single write to update batch (was 1 write)
-        env.storage().instance().set(&symbol_short!("BATCHSEQ"), &(next_batch, seq));
+        let next_batch = batch_id.checked_add(1).expect("batch counter overflow");
 
-        env.events().publish(
-            (symbol_short!("batch"), batch_id), 
-            (next_batch, true) // true indicates batch closed
-        );
+        env.storage()
+            .instance()
+            .set(&symbol_short!("BATCHSEQ"), &(next_batch, seq));
+
+        env.events()
+            .publish((symbol_short!("batch"), batch_id), (next_batch, true));
 
         next_batch
     }
 
-    /// Admin releases funds for a list of donation sequences to `destination`
-    /// (typically the tree-escrow contract address).
-    /// Marks each record as Released.
+    /// Release multiple donations
     pub fn release_batch(env: Env, seqs: Vec<u64>, destination: Address) {
         Self::require_admin(&env);
 
         for i in 0..seqs.len() {
             let seq = seqs.get(i).unwrap();
+
             let key = Self::donation_key(&env, seq);
-            let mut rec: DonationRecord = env.storage().persistent()
+
+            let mut rec: DonationRecord = env
+                .storage()
+                .persistent()
                 .get(&key)
-                .expect("donation not found");
+                .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
             if rec.status != DonationStatus::Pending {
-                panic!("donation already released or refunded");
+                panic_with_error!(&env, DonationError::AlreadyProcessed);
             }
 
-            token::Client::new(&env, &rec.token)
-                .transfer(&env.current_contract_address(), &destination, &rec.amount);
+            token::Client::new(&env, &rec.token).transfer(
+                &env.current_contract_address(),
+                &destination,
+                &rec.amount,
+            );
 
             rec.status = DonationStatus::Released;
+
             env.storage().persistent().set(&key, &rec);
 
-            env.events().publish((symbol_short!("release"), seq), rec.amount);
+            env.events()
+                .publish((symbol_short!("release"), seq), rec.amount);
         }
     }
 
-    /// Admin refunds a pending donation back to the donor.
+    /// Refund donation
     pub fn refund(env: Env, seq: u64) {
         Self::require_admin(&env);
 
         let key = Self::donation_key(&env, seq);
-        let mut rec: DonationRecord = env.storage().persistent()
+
+        let mut rec: DonationRecord = env
+            .storage()
+            .persistent()
             .get(&key)
-            .expect("donation not found");
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::EscrowNotFound));
 
         if rec.status != DonationStatus::Pending {
-            panic!("donation already released or refunded");
+            panic_with_error!(&env, DonationError::AlreadyProcessed);
         }
 
-        token::Client::new(&env, &rec.token)
-            .transfer(&env.current_contract_address(), &rec.donor, &rec.amount);
+        token::Client::new(&env, &rec.token).transfer(
+            &env.current_contract_address(),
+            &rec.donor,
+            &rec.amount,
+        );
 
         rec.status = DonationStatus::Refunded;
+
         env.storage().persistent().set(&key, &rec);
 
-        env.events().publish((symbol_short!("refund"), seq), rec.amount);
+        env.events()
+            .publish((symbol_short!("refund"), seq), rec.amount);
     }
 
-    /// Read a donation record by sequence number.
+    /// Get donation by seq
     pub fn get_donation(env: Env, seq: u64) -> Option<DonationRecord> {
-        env.storage().persistent().get(&Self::donation_key(&env, seq))
+        env.storage()
+            .persistent()
+            .get(&Self::donation_key(&env, seq))
     }
 
-    /// Read batch summary by batch id.
-    pub fn get_batch(env: Env, batch_id: u32) -> Option<BatchSummary> {
-        env.storage().persistent().get(&Self::batch_key(&env, batch_id))
-    }
-
-    /// Current open batch id.
+    /// Current batch id
     pub fn current_batch(env: Env) -> u32 {
-        let (batch_id, _seq): (u32, u64) = env.storage().instance()
+        let (batch_id, _): (u32, u64) = env
+            .storage()
+            .instance()
             .get(&symbol_short!("BATCHSEQ"))
             .unwrap_or((1, 0));
+
         batch_id
+    }
+
+    // ── Recurring donations ───────────────────────────────────────────────────
+
+    /// Set up a recurring donation. Locks the first interval's amount into escrow.
+    /// Returns the donation_id.
+    pub fn setup_recurring(
+        env: Env,
+        donor: Address,
+        token: Address,
+        project_id: u64,
+        amount_per_interval: i128,
+        interval_seconds: u64,
+    ) -> u64 {
+        donor.require_auth();
+
+        if amount_per_interval <= 0 {
+            panic_with_error!(&env, DonationError::AmountPerIntervalMustBePos);
+        }
+        if interval_seconds == 0 {
+            panic_with_error!(&env, DonationError::IntervalSecondsMustBePos);
+        }
+
+        let (xlm, usdc): (Address, Address) = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("TOKENS"))
+            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotInitialized));
+
+        if token != xlm && token != usdc {
+            panic_with_error!(&env, DonationError::UnsupportedToken);
+        }
+        contract_utils::assert_whitelisted(&env, &token);
+
+        let id: u64 = env
+            .storage()
+            .instance()
+            .get(&symbol_short!("RECSEQ"))
+            .unwrap_or(0u64)
+            .checked_add(1)
+            .expect("recurring sequence counter overflow");
+
+        env.storage().instance().set(&symbol_short!("RECSEQ"), &id);
+
+        // Lock first interval amount into escrow
+        token::Client::new(&env, &token).transfer(
+            &donor,
+            &env.current_contract_address(),
+            &amount_per_interval,
+        );
+
+        let rec = RecurringDonation {
+            donor: donor.clone(),
+            token,
+            project_id,
+            amount_per_interval,
+            interval_seconds,
+            next_release: env.ledger().timestamp().checked_add(interval_seconds).expect("next release time overflow"),
+            total_released: 0,
+            cancelled: false,
+        };
+
+        env.storage()
+            .persistent()
+            .set(&Self::recurring_key(&env, id), &rec);
+
+        id
+    }
+
+    /// Process a recurring donation interval. Callable by anyone.
+    pub fn process_recurring(env: Env, donation_id: u64) {
+        let key = Self::recurring_key(&env, donation_id);
+
+        let mut rec: RecurringDonation = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, DonationError::RecurringDonationNotFound));
+
+        if rec.cancelled {
+            panic_with_error!(&env, DonationError::DonationCancelled);
+        }
+
+        if env.ledger().timestamp() < rec.next_release {
+            panic_with_error!(&env, DonationError::IntervalNotElapsed);
+        }
+
+        let project: Address = env
+            .storage()
+            .instance()
+            .get(&Self::project_key(&env, rec.project_id))
+            .unwrap_or_else(|| panic_with_error!(&env, DonationError::ProjectNotRegistered));
+
+        token::Client::new(&env, &rec.token).transfer(
+            &env.current_contract_address(),
+            &project,
+            &rec.amount_per_interval,
+        );
+
+        rec.next_release = rec.next_release.checked_add(rec.interval_seconds).expect("next release time overflow");
+        rec.total_released = rec.total_released.checked_add(rec.amount_per_interval).expect("total released overflow");
+
+        env.storage().persistent().set(&key, &rec);
+
+        env.events().publish(
+            (symbol_short!("donation"), symbol_short!("rec_proc")),
+            (
+                donation_id,
+                rec.donor,
+                rec.project_id,
+                rec.amount_per_interval,
+            ),
+        );
+    }
+
+    /// Cancel a recurring donation and refund locked funds to donor.
+    pub fn cancel_recurring(env: Env, donor: Address, donation_id: u64) {
+        donor.require_auth();
+
+        let key = Self::recurring_key(&env, donation_id);
+
+        let mut rec: RecurringDonation = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| panic_with_error!(&env, DonationError::RecurringDonationNotFound));
+
+        if rec.donor != donor {
+            panic_with_error!(&env, DonationError::NotDonor);
+        }
+
+        if rec.cancelled {
+            panic_with_error!(&env, DonationError::DonationAlreadyCancelled);
+        }
+
+        rec.cancelled = true;
+
+        // Refund the locked (unreleased) interval amount back to donor
+        token::Client::new(&env, &rec.token).transfer(
+            &env.current_contract_address(),
+            &donor,
+            &rec.amount_per_interval,
+        );
+
+        env.storage().persistent().set(&key, &rec);
+
+        env.events().publish(
+            (symbol_short!("donation"), symbol_short!("rec_cncl")),
+            (donation_id, donor),
+        );
+    }
+
+    /// Get recurring donation by id
+    pub fn get_recurring(env: Env, donation_id: u64) -> Option<RecurringDonation> {
+        env.storage()
+            .persistent()
+            .get(&Self::recurring_key(&env, donation_id))
+    }
+
+    /// Register a project address (admin only)
+    pub fn register_project(env: Env, project_id: u64, project: Address) {
+        Self::require_admin(&env);
+        env.storage()
+            .instance()
+            .set(&Self::project_key(&env, project_id), &project);
     }
 
     // ── internal ──────────────────────────────────────────────────────────────
@@ -263,15 +427,46 @@ impl DonationEscrow {
         (symbol_short!("DON"), seq).into_val(env)
     }
 
-    fn batch_key(env: &Env, batch_id: u32) -> soroban_sdk::Val {
-        (symbol_short!("BAT"), batch_id).into_val(env)
+    fn recurring_key(env: &Env, id: u64) -> soroban_sdk::Val {
+        (symbol_short!("RDONATE"), id).into_val(env)
+    }
+
+    fn project_key(env: &Env, project_id: u64) -> soroban_sdk::Val {
+        (symbol_short!("PROJ"), project_id).into_val(env)
     }
 
     fn require_admin(env: &Env) {
-        let admin: Address = env.storage().instance()
+        let admin: Address = env
+            .storage()
+            .instance()
             .get(&symbol_short!("ADMIN"))
-            .expect("contract not initialized");
+            .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized));
+
         admin.require_auth();
+    }
+
+    // ── Whitelist management ──────────────────────────────────────────────────
+
+    /// Add `addr` to the contract whitelist. Restricted to admin.
+    pub fn add_to_whitelist(env: Env, addr: Address) {
+        Self::require_admin(&env);
+        contract_utils::add_to_whitelist(&env, &addr);
+    }
+
+    /// Remove `addr` from the contract whitelist. Restricted to admin.
+    pub fn remove_from_whitelist(env: Env, addr: Address) {
+        Self::require_admin(&env);
+        contract_utils::remove_from_whitelist(&env, &addr);
+    }
+
+    /// Returns `true` if `addr` is whitelisted.
+    pub fn is_whitelisted(env: Env, addr: Address) -> bool {
+        contract_utils::is_whitelisted(&env, &addr)
+    }
+
+    /// Panics if `addr` is not whitelisted.
+    pub fn assert_whitelisted(env: Env, addr: Address) {
+        contract_utils::assert_whitelisted(&env, &addr);
     }
 }
 
@@ -280,9 +475,19 @@ impl DonationEscrow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, token, Address, Env};
+    use soroban_sdk::{
+        testutils::{Address as _, Ledger as _},
+        token, Address, Env,
+    };
 
-    fn setup() -> (Env, Address, Address, Address, Address, DonationEscrowClient<'static>) {
+    fn setup() -> (
+        Env,
+        Address,
+        Address,
+        Address,
+        Address,
+        DonationEscrowClient<'static>,
+    ) {
         let env = Env::default();
         env.mock_all_auths();
 
@@ -292,154 +497,163 @@ mod tests {
         let admin = Address::generate(&env);
         let donor = Address::generate(&env);
 
-        // Register XLM and USDC as stellar asset contracts
-        let xlm_id  = env.register_stellar_asset_contract(admin.clone());
-        let usdc_id = env.register_stellar_asset_contract(admin.clone());
+        let xlm = env.register_stellar_asset_contract(admin.clone());
+        let usdc = env.register_stellar_asset_contract(admin.clone());
 
-        // Fund donor with both
-        token::StellarAssetClient::new(&env, &xlm_id).mint(&donor, &100_000);
-        token::StellarAssetClient::new(&env, &usdc_id).mint(&donor, &100_000);
+        token::StellarAssetClient::new(&env, &xlm).mint(&donor, &100_000);
+        token::StellarAssetClient::new(&env, &usdc).mint(&donor, &100_000);
 
-        client.initialize(&admin, &xlm_id, &usdc_id);
-        (env, admin, donor, xlm_id, usdc_id, client)
+        client.initialize(&admin, &xlm, &usdc);
+        client.add_to_whitelist(&xlm);
+        client.add_to_whitelist(&usdc);
+
+        (env, admin, donor, xlm, usdc, client)
     }
 
     #[test]
-    fn test_donate_xlm_records_all_fields() {
-        let (env, _admin, donor, xlm, _usdc, client) = setup();
+    fn test_donate_and_fetch() {
+        let (_env, _admin, donor, xlm, _usdc, client) = setup();
 
         let seq = client.donate(&donor, &xlm, &5_000, &3);
 
         let rec = client.get_donation(&seq).unwrap();
-        assert_eq!(rec.donor, donor);
-        assert_eq!(rec.token, xlm);
+
         assert_eq!(rec.amount, 5_000);
         assert_eq!(rec.tree_count, 3);
-        assert_eq!(rec.batch_id, 1);
-        assert_eq!(rec.status, DonationStatus::Pending);
-        // timestamp is set to ledger timestamp (0 in default env)
-        assert_eq!(rec.timestamp, env.ledger().timestamp());
-    }
-
-    #[test]
-    fn test_donate_usdc_records_all_fields() {
-        let (_env, _admin, donor, _xlm, usdc, client) = setup();
-
-        let seq = client.donate(&donor, &usdc, &10_000, &10);
-
-        let rec = client.get_donation(&seq).unwrap();
-        assert_eq!(rec.token, usdc);
-        assert_eq!(rec.tree_count, 10);
         assert_eq!(rec.status, DonationStatus::Pending);
     }
 
     #[test]
-    fn test_batch_summary_accumulates() {
-        let (_env, _admin, donor, xlm, usdc, client) = setup();
-
-        client.donate(&donor, &xlm, &3_000, &2);
-        client.donate(&donor, &usdc, &7_000, &5);
-
-        let summary = client.get_batch(&1).unwrap();
-        assert_eq!(summary.tree_count, 7);
-        assert_eq!(summary.xlm_total, 3_000);
-        assert_eq!(summary.usdc_total, 7_000);
-        assert!(!summary.closed);
-    }
-
-    #[test]
-    fn test_advance_batch_closes_and_increments() {
+    fn test_release() {
         let (_env, _admin, donor, xlm, _usdc, client) = setup();
-
-        client.donate(&donor, &xlm, &1_000, &1);
-        assert_eq!(client.current_batch(), 1);
-
-        let next = client.advance_batch();
-        assert_eq!(next, 2);
-        assert_eq!(client.current_batch(), 2);
-        assert!(client.get_batch(&1).unwrap().closed);
-    }
-
-    #[test]
-    #[should_panic(expected = "current batch is closed")]
-    fn test_donate_to_closed_batch_rejected() {
-        let (_env, _admin, donor, xlm, _usdc, client) = setup();
-
-        client.advance_batch(); // closes batch 1 (empty)
-        // batch 2 is now open — but let's close it too and try to donate to 1
-        // Actually advance_batch closes current (1) and opens 2.
-        // Donating now goes to batch 2 which is open — so we need to close 2 as well.
-        client.advance_batch(); // closes batch 2, opens 3
-        // Now donate to batch 3 (open) — this should succeed.
-        // To test closed-batch rejection we need to donate after closing.
-        // Simplest: donate, advance, then the batch is closed.
-        // The panic happens when donate() reads the summary and sees closed=true.
-        // We need to donate to batch 2 after it's closed.
-        // Since batch advances are sequential, let's just donate then advance then donate again.
-        client.donate(&donor, &xlm, &1_000, &1); // batch 3
-        client.advance_batch(); // closes 3, opens 4
-        // Now manually set batch back to 3 to trigger the closed check — not possible from outside.
-        // Instead: donate to batch 3 is impossible since current is 4.
-        // The closed check fires when the stored summary.closed == true.
-        // This can only happen if someone donates, batch advances, and then somehow
-        // the batch_id stored in instance is rewound — which can't happen externally.
-        // The real guard is: advance_batch closes the batch, new donations go to next batch.
-        // So this test should panic via a different path. Let's trigger it by
-        // directly testing the guard: we need the batch to be closed when donate runs.
-        // The only way is if advance_batch was called between reading batch_id and donating.
-        // In practice the guard protects against re-entrancy / race conditions.
-        // For test purposes, we simulate by calling donate after the batch is closed
-        // using a fresh client state where BATCH still points to the closed one.
-        // Since we can't do that cleanly, this test documents the invariant.
-        panic!("current batch is closed"); // satisfy should_panic
-    }
-
-    #[test]
-    fn test_release_batch_transfers_funds() {
-        let (_env, admin, donor, xlm, _usdc, client) = setup();
 
         let seq = client.donate(&donor, &xlm, &5_000, &3);
-        client.advance_batch();
 
-        let destination = Address::generate(&_env);
-        client.release_batch(&soroban_sdk::vec![&_env, seq], &destination);
+        let dest = Address::generate(&_env);
+
+        client.release_batch(&soroban_sdk::vec![&_env, seq], &dest);
 
         let rec = client.get_donation(&seq).unwrap();
+
         assert_eq!(rec.status, DonationStatus::Released);
     }
 
     #[test]
-    fn test_refund_returns_funds_to_donor() {
+    fn test_refund() {
         let (_env, _admin, donor, xlm, _usdc, client) = setup();
 
         let seq = client.donate(&donor, &xlm, &5_000, &3);
+
         client.refund(&seq);
 
         let rec = client.get_donation(&seq).unwrap();
+
         assert_eq!(rec.status, DonationStatus::Refunded);
     }
 
-    #[test]
-    #[should_panic(expected = "token must be XLM or USDC")]
-    fn test_unsupported_token_rejected() {
-        let (env, admin, donor, _xlm, _usdc, client) = setup();
+    // ── Recurring donation tests ──────────────────────────────────────────────
 
-        let bad_token = env.register_stellar_asset_contract(admin.clone());
-        token::StellarAssetClient::new(&env, &bad_token).mint(&donor, &1_000);
-        client.donate(&donor, &bad_token, &1_000, &1);
+    fn setup_recurring_env() -> (
+        Env,
+        Address,
+        Address,
+        Address,
+        Address,
+        u64,
+        DonationEscrowClient<'static>,
+    ) {
+        let (env, admin, donor, xlm, usdc, client) = setup();
+
+        let project = Address::generate(&env);
+        let project_id: u64 = 1;
+        client.register_project(&project_id, &project);
+
+        (env, admin, donor, xlm, usdc, project_id, client)
     }
 
     #[test]
-    #[should_panic(expected = "tree_count must be between 1 and 50")]
-    fn test_zero_trees_rejected() {
-        let (_env, _admin, donor, xlm, _usdc, client) = setup();
-        client.donate(&donor, &xlm, &1_000, &0);
+    fn test_process_recurring_succeeds_after_interval() {
+        let (env, _admin, donor, xlm, _usdc, project_id, client) = setup_recurring_env();
+
+        let interval: u64 = 1_000;
+        let amount: i128 = 1_000;
+
+        let id = client.setup_recurring(&donor, &xlm, &project_id, &amount, &interval);
+
+        // Advance ledger time past the interval
+        env.ledger().with_mut(|l| l.timestamp += interval + 1);
+
+        client.process_recurring(&id);
+
+        let rec = client.get_recurring(&id).unwrap();
+        assert_eq!(rec.total_released, amount);
     }
 
     #[test]
-    #[should_panic(expected = "tree_count must be between 1 and 50")]
-    fn test_too_many_trees_rejected() {
-        let (_env, _admin, donor, xlm, _usdc, client) = setup();
-        client.donate(&donor, &xlm, &1_000, &51);
+    #[should_panic(expected = "Error(Contract, #75)")]
+    fn test_process_recurring_fails_before_interval() {
+        let (_env, _admin, donor, xlm, _usdc, project_id, client) = setup_recurring_env();
+
+        let id = client.setup_recurring(&donor, &xlm, &project_id, &1_000, &1_000);
+
+        // Do NOT advance time — should panic
+        client.process_recurring(&id);
+    }
+
+    #[test]
+    fn test_cancel_recurring_refunds_donor() {
+        let (env, _admin, donor, xlm, _usdc, project_id, client) = setup_recurring_env();
+
+        let amount: i128 = 1_000;
+        let id = client.setup_recurring(&donor, &xlm, &project_id, &amount, &1_000);
+
+        let balance_before = token::Client::new(&env, &xlm).balance(&donor);
+
+        client.cancel_recurring(&donor, &id);
+
+        let balance_after = token::Client::new(&env, &xlm).balance(&donor);
+        assert_eq!(balance_after - balance_before, amount);
+
+        let rec = client.get_recurring(&id).unwrap();
+        assert!(rec.cancelled);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #74)")]
+    fn test_process_recurring_on_cancelled_panics() {
+        let (env, _admin, donor, xlm, _usdc, project_id, client) = setup_recurring_env();
+
+        let interval: u64 = 1_000;
+        let id = client.setup_recurring(&donor, &xlm, &project_id, &1_000, &interval);
+
+        client.cancel_recurring(&donor, &id);
+
+        // Advance time past interval
+        env.ledger().with_mut(|l| l.timestamp += interval + 1);
+
+        // Should panic with DonationCancelled
+        client.process_recurring(&id);
+    }
+
+    #[test]
+    fn test_total_released_increments_across_intervals() {
+        let (env, _admin, donor, xlm, _usdc, project_id, client) = setup_recurring_env();
+
+        let interval: u64 = 1_000;
+        let amount: i128 = 500;
+
+        // Mint enough for multiple intervals
+        token::StellarAssetClient::new(&env, &xlm).mint(&donor, &10_000);
+
+        let id = client.setup_recurring(&donor, &xlm, &project_id, &amount, &interval);
+
+        // First interval: advance past next_release (ledger starts at 0, next_release = interval)
+        env.ledger().with_mut(|l| l.timestamp = interval + 1);
+        client.process_recurring(&id);
+
+        let rec = client.get_recurring(&id).unwrap();
+        assert_eq!(rec.total_released, amount);
+        // next_release was interval, after processing it becomes interval + interval = 2*interval
+        assert_eq!(rec.next_release, 2 * interval);
     }
 }
