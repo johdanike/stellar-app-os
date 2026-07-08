@@ -29,19 +29,12 @@
 //! Validator management (`register_validator` / `revoke_validator`) is
 //! restricted to the admin address set at `initialize`.
 
-use harvesta_errors::HarvestaError;
+use harvesta_errors::{HarvestaError, FarmerError};
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Bytes,
     BytesN, Env, IntoVal, String,
 };
 use admin_controls::AdminControlsClient;
-
-#[contracttype]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
-pub enum FarmerPlotError {
-    InvalidCoordinatesCount = 150,
-    PlotAlreadyExists = 151,
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -195,7 +188,7 @@ impl FarmerRegistry {
 
         let key = Self::farmer_key(&env, &wallet_address);
         if env.storage().persistent().has(&key) {
-            panic_with_error!(&env, HarvestaError::FarmerAlreadyRegistered);
+            panic_with_error!(&env, FarmerError::FarmerAlreadyRegistered);
         }
 
         let profile = FarmerProfile {
@@ -262,7 +255,7 @@ impl FarmerRegistry {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::FarmerNotRegistered));
+            .unwrap_or_else(|| panic_with_error!(&env, FarmerError::FarmerNotRegistered));
 
         // Increment version counter and archive previous profile
         let version_key = Self::version_counter_key(&env, &wallet_address);
@@ -331,7 +324,7 @@ impl FarmerRegistry {
         env.storage()
             .persistent()
             .get(&Self::farmer_key(&env, &wallet_address))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::FarmerNotRegistered))
+            .unwrap_or_else(|| panic_with_error!(&env, FarmerError::FarmerNotRegistered))
     }
 
     /// Returns a specific history entry for a farmer by version number.
@@ -367,15 +360,6 @@ impl FarmerRegistry {
             .has(&Self::farmer_key(&env, &wallet_address))
     }
 
-    /// Toggle planter availability — planters can pause accepting new jobs
-    /// without being penalised or removed from the registry.
-    ///
-    /// # Parameters
-    /// - `wallet_address`: The planter's wallet (must match the caller).
-    /// - `available`: `true` to accept jobs, `false` to pause.
-    ///
-    /// # Errors
-    /// Panics with "farmer not registered" if the caller has no profile.
     // ── Availability toggle (farmer-only, unchanged) ──────────────────────────
 
     /// Toggle farmer availability — farmers can pause accepting new jobs
@@ -386,14 +370,12 @@ impl FarmerRegistry {
         Self::assert_not_paused(&env);
         wallet_address.require_auth();
 
-        // Planter must be registered before toggling availability.
         if !env
             .storage()
             .persistent()
             .has(&Self::farmer_key(&env, &wallet_address))
         {
-            panic!("farmer not registered");
-            panic_with_error!(&env, HarvestaError::FarmerNotRegistered);
+            panic_with_error!(&env, FarmerError::FarmerNotRegistered);
         }
 
         let key = Self::availability_key(&env, &wallet_address);
@@ -408,8 +390,6 @@ impl FarmerRegistry {
     /// Returns `true` if the farmer is currently accepting jobs.
     /// Defaults to `true` — availability is opt-out.
     pub fn is_available(env: Env, wallet_address: Address) -> bool {
-        let key = Self::availability_key(&env, &wallet_address);
-        env.storage().persistent().get(&key).unwrap_or(true)
         env.storage()
             .persistent()
             .get(&Self::availability_key(&env, &wallet_address))
@@ -437,12 +417,12 @@ impl FarmerRegistry {
 
         let len = coordinates.len();
         if len < 3 || len > 50 {
-            panic_with_error!(&env, FarmerPlotError::InvalidCoordinatesCount);
+            panic_with_error!(&env, FarmerError::InvalidCoordinatesCount);
         }
 
         let plot_key = Self::plot_key(&env, &plot_id);
         if env.storage().persistent().has(&plot_key) {
-            panic_with_error!(&env, FarmerPlotError::PlotAlreadyExists);
+            panic_with_error!(&env, FarmerError::PlotAlreadyExists);
         }
 
         let plot = FarmPlot {
@@ -518,7 +498,7 @@ impl FarmerRegistry {
 
     fn require_validator(env: &Env, caller: &Address) {
         if !Self::_is_validator(env, caller) {
-            panic_with_error!(env, HarvestaError::NotValidator);
+            panic_with_error!(env, FarmerError::NotValidator);
         }
     }
 
@@ -536,7 +516,7 @@ impl FarmerRegistry {
     fn assert_sha256_integrity(env: &Env, preimage: &Bytes, expected_hash: &BytesN<32>) {
         let computed: BytesN<32> = env.crypto().sha256(preimage).into();
         if computed != *expected_hash {
-            panic_with_error!(env, HarvestaError::HashMismatch);
+            panic_with_error!(env, FarmerError::HashMismatch);
         }
     }
 
@@ -548,7 +528,7 @@ impl FarmerRegistry {
                 return;
             }
         }
-        panic_with_error!(env, HarvestaError::InvalidRegion);
+        panic_with_error!(env, FarmerError::InvalidRegion);
     }
 
     fn farmer_key(env: &Env, wallet: &Address) -> soroban_sdk::Val {
@@ -640,7 +620,7 @@ mod tests {
 
     #[test]
     fn test_revoke_validator() {
-        let (env, admin, validator, client) = setup();
+        let (_env, admin, validator, client) = setup();
 
         assert!(client.is_validator(&validator));
         client.revoke_validator(&admin, &validator);
@@ -688,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_get_farmer_verified_non_validator_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -701,7 +681,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #35)")]
+    #[should_panic(expected = "Error(Contract, #1)")]
     fn test_double_registration_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -713,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #37)")]
+    #[should_panic(expected = "Error(Contract, #3)")]
     fn test_invalid_region_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -723,7 +703,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_register_farmer_non_validator_rejected() {
         let (env, _, _, client) = setup();
         let attacker = Address::generate(&env);
@@ -736,7 +716,7 @@ mod tests {
     // ── SHA-256 integrity ─────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #68)")]
+    #[should_panic(expected = "Error(Contract, #7)")]
     fn test_hash_mismatch_on_register_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -748,7 +728,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #68)")]
+    #[should_panic(expected = "Error(Contract, #7)")]
     fn test_hash_mismatch_on_update_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -824,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_profile_history_non_validator_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -897,16 +877,8 @@ mod tests {
         let (pa, ha) = doc(&env, 1);
         let (pb, hb) = doc(&env, 2);
 
-        client.register_farmer(
-            &farmer_a,
-            &land_hash(&env, 1),
-            &String::from_str(&env, "s1"),
-        );
-        client.register_farmer(
-            &farmer_b,
-            &land_hash(&env, 2),
-            &String::from_str(&env, "s2"),
-        );
+        client.register_farmer(&validator, &farmer_a, &ha, &pa, &region(&env, "s1"));
+        client.register_farmer(&validator, &farmer_b, &hb, &pb, &region(&env, "s2"));
 
         client.set_available(&farmer_a, &false);
         assert!(!client.is_available(&farmer_a));

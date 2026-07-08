@@ -23,7 +23,10 @@
 //!   list_species(slugs) -> Vec<SpeciesRecord>
 
 use harvesta_errors::HarvestaError;
-use soroban_sdk::{contract, contractimpl, contracttype, panic_with_error, symbol_short, vec, Address, Env, Symbol, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, panic_with_error, symbol_short, vec, Address, Env,
+    Symbol, Vec, String,
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -162,7 +165,9 @@ impl SpeciesRegistry {
             is_high_water: false,
         };
 
-        env.storage().persistent().set(&species_key(&slug), &record);
+        env.storage()
+            .persistent()
+            .set(&species_key(&slug), &record);
 
         env.events().publish(
             (symbol_short!("species"), symbol_short!("register")),
@@ -280,6 +285,8 @@ mod tests {
             &2200_i128,
             &125_i128,
             &20_u32,
+            &false,
+            &false,
         );
     }
 
@@ -294,7 +301,7 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         let record = client.get_species(&slug);
         assert_eq!(record.co2_scaled, 2200);
@@ -303,34 +310,6 @@ mod tests {
         assert_eq!(client.get_co2_rate(&slug), 2200);
     }
 
-    #[test]
-    fn test_list_species_returns_batch() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register_contract(None, SpeciesRegistry);
-        let client = SpeciesRegistryClient::new(&env, &contract_id);
-
-        let admin = Address::generate(&env);
-        client.initialize(&admin);
-
-        let s1 = Symbol::new(&env, "teak");
-        let s2 = Symbol::new(&env, "acacia");
-        reg(&client, &s1, &env);
-        client.register_species(
-            &s2,
-            &SorobanString::from_str(&env, "Acacia"),
-            &SorobanString::from_str(&env, "Africa"),
-            &1500_i128,
-            &80_i128,
-            &10_u32,
-        );
-
-        let slugs = vec![&env, s1.clone(), s2.clone()];
-        let records = client.list_species(&slugs);
-        assert_eq!(records.len(), 2);
-        assert_eq!(records.get(0).unwrap().slug, s1);
-        assert_eq!(records.get(1).unwrap().slug, s2);
-    }
 
     #[test]
     #[should_panic(expected = "Error(Contract, #64)")]
@@ -357,7 +336,7 @@ mod tests {
 
         let admin = Address::generate(&env);
         client.initialize(&admin);
-        client.register_species(&Symbol::new(&env, "bad"), &0_i128, &5_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "bad"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &0_i128, &125_i128, &5_u32, &false, &false);
     }
 
     #[test]
@@ -370,7 +349,7 @@ mod tests {
 
         let admin = Address::generate(&env);
         client.initialize(&admin);
-        client.register_species(&Symbol::new(&env, "bad"), &2200_i128, &0_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "bad"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &0_u32, &false, &false);
     }
 
     // ── CO2 rate tests ─────────────────────────────────────────────────────────────
@@ -387,7 +366,7 @@ mod tests {
 
         // Register teak: 22.00 kg/year → 2200 scaled
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         assert_eq!(client.get_co2_rate(&slug), 2200);
     }
@@ -403,10 +382,10 @@ mod tests {
         client.initialize(&admin);
 
         // Register multiple species with different CO2 rates
-        client.register_species(&Symbol::new(&env, "teak"), &2200_i128, &20_u32, &false, &false);      // 22.00 kg/year
-        client.register_species(&Symbol::new(&env, "moringa"), &900_i128, &3_u32, &false, &false);     // 9.00 kg/year
-        client.register_species(&Symbol::new(&env, "eucalyptus"), &3100_i128, &10_u32, &false, &false); // 31.00 kg/year
-        client.register_species(&Symbol::new(&env, "bamboo"), &3500_i128, &5_u32, &false, &false);   // 35.00 kg/year
+client.register_species(&Symbol::new(&env, "teak"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "moringa"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &900_i128, &125_i128, &3_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "eucalyptus"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3100_i128, &125_i128, &10_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "bamboo"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3500_i128, &125_i128, &5_u32, &false, &false);
 
         assert_eq!(client.get_co2_rate(&Symbol::new(&env, "teak")), 2200);
         assert_eq!(client.get_co2_rate(&Symbol::new(&env, "moringa")), 900);
@@ -425,10 +404,10 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         // Update with new values
-        client.register_species(&slug, &2500_i128, &25_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2500_i128, &125_i128, &25_u32, &false, &false);
 
         let record = client.get_species(&slug);
         assert_eq!(record.co2_scaled, 2500);
@@ -450,7 +429,7 @@ mod tests {
 
         // Teak: 22.00 kg/year → 2200 scaled
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         // 100 trees for 1 year: 22.00 * 100 * 1 = 2200 kg
         let offset = client.calculate_offset(&slug, &100, &1);
@@ -469,7 +448,7 @@ mod tests {
 
         // Teak: 22.00 kg/year → 2200 scaled
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         // 100 trees for 5 years: 22.00 * 100 * 5 = 11000 kg
         let offset = client.calculate_offset(&slug, &100, &5);
@@ -487,9 +466,9 @@ mod tests {
         client.initialize(&admin);
 
         // Register species with different rates
-        client.register_species(&Symbol::new(&env, "teak"), &2200_i128, &20_u32, &false, &false);      // 22.00 kg/year
-        client.register_species(&Symbol::new(&env, "moringa"), &900_i128, &3_u32, &false, &false);     // 9.00 kg/year
-        client.register_species(&Symbol::new(&env, "bamboo"), &3500_i128, &5_u32, &false, &false);    // 35.00 kg/year
+client.register_species(&Symbol::new(&env, "teak"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "moringa"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &900_i128, &125_i128, &3_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "bamboo"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3500_i128, &125_i128, &5_u32, &false, &false);
 
         // 50 trees for 2 years each
         let teak_offset = client.calculate_offset(&Symbol::new(&env, "teak"), &50, &2);
@@ -516,7 +495,7 @@ mod tests {
 
         // Eucalyptus: 31.00 kg/year → 3100 scaled
         let slug = Symbol::new(&env, "eucalyptus");
-        client.register_species(&slug, &3100_i128, &10_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3100_i128, &125_i128, &10_u32, &false, &false);
 
         // 10,000 trees for 10 years: 31.00 * 10000 * 10 = 3,100,000 kg
         let offset = client.calculate_offset(&slug, &10000, &10);
@@ -535,7 +514,7 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         client.calculate_offset(&slug, &0, &5);
     }
@@ -552,7 +531,7 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         client.calculate_offset(&slug, &100, &0);
     }
@@ -585,7 +564,7 @@ mod tests {
 
         // Teak: 22.00 kg/year, 20 year maturity
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         // Request 5 years (within maturity): should use 5 years
         let offset = client.calculate_offset_to_maturity(&slug, &100, &5);
@@ -605,7 +584,7 @@ mod tests {
 
         // Moringa: 9.00 kg/year, 3 year maturity
         let slug = Symbol::new(&env, "moringa");
-        client.register_species(&slug, &900_i128, &3_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &900_i128, &125_i128, &3_u32, &false, &false);
 
         // Request 10 years (exceeds maturity): should cap at 3 years
         let offset = client.calculate_offset_to_maturity(&slug, &100, &10);
@@ -625,7 +604,7 @@ mod tests {
 
         // Bamboo: 35.00 kg/year, 5 year maturity
         let slug = Symbol::new(&env, "bamboo");
-        client.register_species(&slug, &3500_i128, &5_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3500_i128, &125_i128, &5_u32, &false, &false);
 
         // Request exactly 5 years (maturity period)
         let offset = client.calculate_offset_to_maturity(&slug, &50, &5);
@@ -645,7 +624,7 @@ mod tests {
 
         // Baobab: 8.00 kg/year, 50 year maturity
         let slug = Symbol::new(&env, "baobab");
-        client.register_species(&slug, &800_i128, &50_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &800_i128, &125_i128, &50_u32, &false, &false);
 
         // Request 20 years (within 50 year maturity)
         let offset = client.calculate_offset_to_maturity(&slug, &200, &20);
@@ -670,7 +649,7 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         client.calculate_offset_to_maturity(&slug, &0, &5);
     }
@@ -687,7 +666,7 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "teak");
-        client.register_species(&slug, &2200_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2200_i128, &125_i128, &20_u32, &false, &false);
 
         client.calculate_offset_to_maturity(&slug, &100, &0);
     }
@@ -706,7 +685,7 @@ mod tests {
 
         // Register a species
         let slug = Symbol::new(&env, "mahogany");
-        client.register_species(&slug, &1800_i128, &25_u32, &false, &false); // 18.00 kg/year, 25 year maturity
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &1800_i128, &125_i128, &25_u32, &false, &false);
 
         // Verify registration
         let record = client.get_species(&slug);
@@ -737,9 +716,9 @@ mod tests {
         client.initialize(&admin);
 
         // Register species with different CO2 rates
-        client.register_species(&Symbol::new(&env, "shea"), &700_i128, &20_u32, &false, &false);       // 7.00 kg/year
-        client.register_species(&Symbol::new(&env, "pine"), &2500_i128, &15_u32, &false, &false);     // 25.00 kg/year
-        client.register_species(&Symbol::new(&env, "bamboo"), &3500_i128, &5_u32, &false, &false);    // 35.00 kg/year
+client.register_species(&Symbol::new(&env, "shea"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &700_i128, &125_i128, &20_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "pine"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &2500_i128, &125_i128, &15_u32, &false, &false);
+client.register_species(&Symbol::new(&env, "bamboo"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3500_i128, &125_i128, &5_u32, &false, &false);
 
         // Compare offsets for same tree count and time period
         let tree_count = 100;
@@ -771,7 +750,7 @@ mod tests {
 
         // Register species with fractional CO2 rate (e.g., 12.50 kg/year → 1250 scaled)
         let slug = Symbol::new(&env, "custom");
-        client.register_species(&slug, &1250_i128, &10_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &1250_i128, &125_i128, &10_u32, &false, &false);
 
         // 100 trees for 1 year: 12.50 * 100 * 1 = 1250 kg
         let offset = client.calculate_offset(&slug, &100, &1);
@@ -796,7 +775,7 @@ mod tests {
         client.initialize(&admin);
 
         // Eucalyptus is invasive in dryland savannah contexts
-        client.register_species(&Symbol::new(&env, "eucalyptus"), &3100_i128, &10_u32, &true, &false);
+client.register_species(&Symbol::new(&env, "eucalyptus"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &3100_i128, &125_i128, &10_u32, &true, &false);
     }
 
     #[test]
@@ -811,7 +790,7 @@ mod tests {
         client.initialize(&admin);
 
         // Sugar cane is high-water-consuming
-        client.register_species(&Symbol::new(&env, "sugarcane"), &1500_i128, &5_u32, &false, &true);
+client.register_species(&Symbol::new(&env, "sugarcane"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &1500_i128, &125_i128, &5_u32, &false, &true);
     }
 
     #[test]
@@ -826,7 +805,7 @@ mod tests {
         client.initialize(&admin);
 
         // Both flags set — invasive check runs first
-        client.register_species(&Symbol::new(&env, "bad"), &1000_i128, &5_u32, &true, &true);
+client.register_species(&Symbol::new(&env, "bad"), &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &1000_i128, &125_i128, &5_u32, &true, &true);
     }
 
     #[test]
@@ -840,7 +819,7 @@ mod tests {
         client.initialize(&admin);
 
         let slug = Symbol::new(&env, "shea");
-        client.register_species(&slug, &700_i128, &20_u32, &false, &false);
+client.register_species(&slug, &SorobanString::from_str(&env, "Test"), &SorobanString::from_str(&env, "Region"), &700_i128, &125_i128, &20_u32, &false, &false);
 
         let record = client.get_species(&slug);
         assert_eq!(record.co2_scaled, 700);

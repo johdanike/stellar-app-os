@@ -1,6 +1,6 @@
 #![no_std]
 
-//! `shared` — Common types and helpers for the FarmCredit Soroban contract suite.
+
 //!
 //! Closes #502.
 //!
@@ -140,7 +140,7 @@ mod tests {
         let admin = Address::generate(&env);
         env.storage()
             .instance()
-            .set(&symbol_short!("ADMIN"), &admin);
+            .set(&soroban_sdk::symbol_short!("ADMIN"), &admin);
         assert!(is_initialised(&env));
     }
 
@@ -157,7 +157,7 @@ mod tests {
         let admin = Address::generate(&env);
         env.storage()
             .instance()
-            .set(&symbol_short!("ADMIN"), &admin);
+            .set(&soroban_sdk::symbol_short!("ADMIN"), &admin);
         assert_eq!(load_admin(&env), admin);
     }
 }

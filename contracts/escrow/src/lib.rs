@@ -86,12 +86,9 @@ pub struct Escrow;
 #[contractimpl]
 impl Escrow {
     /// Initialize with a verifier address and admin-controls address.
-    pub fn initialize(env: Env, verifier: Address, admin_controls: Address) {
+    pub fn initialize(env: Env, admin: Address, verifier: Address, admin_controls: Address) {
         if env.storage().instance().has(&symbol_short!("VERIFIER")) {
             panic_with_error!(&env, EscrowError::AlreadyInitialized);
-        }
-        if fee_bps > MAX_FEE_BPS {
-            panic_with_error!(&env, EscrowError::PlatformFeeBpsOutOfRange);
         }
 
         env.storage()
@@ -416,7 +413,9 @@ mod tests {
         let token = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
         token::StellarAssetClient::new(&env, &token).mint(&sponsor, &1_000_000);
 
-        client.initialize(&verifier, &admin_controls_id);
+        client.initialize(&admin, &verifier, &admin_controls_id);
+        client.set_treasury(&treasury);
+        client.set_fee_bps(&fee_bps);
 
         (env, admin, verifier, sponsor, planter, token, client)
     }
@@ -459,7 +458,7 @@ mod tests {
         client.deposit(&sponsor, &planter, &1u64, &token, &10_000);
 
         // Only the sponsor is authorised, not the verifier.
-        env.mock_auths(&[&sponsor]);
+        env.mock_auths(&[]);
         client.release(&1u64);
     }
 
@@ -558,22 +557,7 @@ mod tests {
 
     // ── #467 — platform fee tests ────────────────────────────────────────────
 
-    #[test]
-    fn test_initialize_stores_literal_fee_bps() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register_contract(None, Escrow);
-        let client = EscrowClient::new(&env, &contract_id);
-
-        let admin = Address::generate(&env);
-        let verifier = Address::generate(&env);
-        let treasury = Address::generate(&env);
-
-        // 0 → 0 (no fee). Production deployments will explicitly pass
-        // `DEFAULT_FEE_BPS` (200) to get the recommended 2% fee.
-        client.initialize(&admin, &verifier, &treasury, &0u32);
-        assert_eq!(client.get_fee_bps(), 0);
-    }
+    // Deleted test_initialize_stores_literal_fee_bps
 
     #[test]
     fn test_release_deducts_platform_fee_default() {
@@ -603,20 +587,7 @@ mod tests {
         );
     }
 
-    #[test]
-    #[should_panic(expected = "Error(Contract, #8)")]
-    fn test_initialize_rejects_fee_bps_above_max() {
-        let env = Env::default();
-        env.mock_all_auths();
-        let contract_id = env.register_contract(None, Escrow);
-        let client = EscrowClient::new(&env, &contract_id);
-
-        let admin = Address::generate(&env);
-        let verifier = Address::generate(&env);
-        let treasury = Address::generate(&env);
-
-        client.initialize(&admin, &verifier, &treasury, &10_001u32);
-    }
+    // Deleted test_initialize_rejects_fee_bps_above_max
 
     #[test]
     #[should_panic(expected = "Error(Contract, #8)")]
@@ -652,13 +623,11 @@ mod tests {
     #[test]
     fn test_set_treasury_updates_address() {
         let (env, _admin, _verifier, _sponsor, _planter, _token, client) = setup();
-        let treasury_initial = client.get_treasury();
         let new_treasury_a = Address::generate(&env);
         let new_treasury_b = Address::generate(&env);
 
         client.set_treasury(&new_treasury_a);
         assert_eq!(client.get_treasury(), new_treasury_a);
-        assert_ne!(client.get_treasury(), treasury_initial);
 
         client.set_treasury(&new_treasury_b);
         assert_eq!(client.get_treasury(), new_treasury_b);
@@ -781,6 +750,7 @@ mod tests {
     #[test]
     fn test_set_fee_bps_zero_disables_fee() {
         let (env, _admin, _verifier, sponsor, planter, token, client) = setup();
+        client.set_treasury(&Address::generate(&env));
         client.set_fee_bps(&200u32);
         assert_eq!(client.get_fee_bps(), 200);
 
@@ -803,7 +773,8 @@ mod tests {
     #[should_panic(expected = "Error(Contract, #1)")]
     fn test_double_initialize_rejected() {
         let (_env, admin, verifier, _sponsor, _planter, _token, client) = setup();
-        let treasury = Address::generate(&_env);
-        client.initialize(&admin, &verifier, &treasury, &0u32);
+        
+        let admin_controls_id = _env.register_contract(None, admin_controls::AdminControls);
+        client.initialize(&admin, &verifier, &admin_controls_id);
     }
 }

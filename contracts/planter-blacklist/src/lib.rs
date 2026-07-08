@@ -225,7 +225,7 @@ impl PlanterBlacklist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};
+    use soroban_sdk::{testutils::{Address as _, Ledger}, Address, BytesN, Env};
 
     fn setup() -> (Env, Address, PlanterBlacklistClient<'static>) {
         let env = Env::default();

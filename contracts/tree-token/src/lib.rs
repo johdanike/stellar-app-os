@@ -34,6 +34,7 @@
 //! The admin can pause/unpause and update the oracle address.
 
 use harvesta_errors::HarvestaError;
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, panic_with_error, symbol_short, token,
     Address, Bytes, BytesN, Env, IntoVal, Symbol,

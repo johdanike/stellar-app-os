@@ -24,13 +24,13 @@ function shouldRunDailySummary(lastRunDay: number | null): boolean {
 }
 
 async function main() {
-  console.log('[treasury-monitor] starting, check interval %dms', POLL_INTERVAL_MS);
+  console.info('[treasury-monitor] starting, check interval %dms', POLL_INTERVAL_MS);
   let dailySummaryLastRun: number | null = null;
 
   while (true) {
     try {
       await checkAndAlert();
-      console.log('[treasury-monitor] balance check complete');
+      console.info('[treasury-monitor] balance check complete');
     } catch (err) {
       console.error('[treasury-monitor] balance check error:', err);
     }
@@ -42,7 +42,7 @@ async function main() {
           new Date().getUTCDate() |
           (new Date().getUTCMonth() << 5) |
           (new Date().getUTCFullYear() << 9);
-        console.log('[treasury-monitor] daily summary sent');
+        console.info('[treasury-monitor] daily summary sent');
       }
     } catch (err) {
       console.error('[treasury-monitor] daily summary error:', err);
