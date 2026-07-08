@@ -58,6 +58,10 @@ const PROGRESS_STREAM_COUNT: u32 = 5;
 /// 6 months in seconds (approx 26 weeks)
 const SIX_MONTHS_SECS: u64 = 60 * 60 * 24 * 7 * 26;
 
+/// Maximum trees per batch deposit (Stellar operation limit safety margin)
+const MAX_BATCH_SIZE: u32 = 50;
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 /// 1 year in seconds (approx 52 weeks)
 const ONE_YEAR_SECS: u64 = 60 * 60 * 24 * 7 * 52;
 /// Window in which a sponsor may challenge a verification outcome (#469)
@@ -310,6 +314,14 @@ enum DataKey {
     CorpBatch(u64),
 }
 
+/// A single slot in a batch deposit: one farmer address and the amount for that tree.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct BatchSlot {
+    pub farmer: Address,
+    pub amount: i128,
+}
+
 // ── Contract ──────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -498,6 +510,31 @@ impl TreeEscrow {
     }
 
     /// Batch deposit: donor funds N tree slots in a single contract invocation.
+    ///
+    /// Gas efficiency: one token transfer for the total, then N storage writes.
+    /// Each slot maps to one farmer escrow record in the next planting cycle.
+    ///
+    /// Constraints:
+    ///   - All slots must use the same token.
+    ///   - No farmer in the batch may already have an active escrow.
+    ///   - Batch size is capped at MAX_BATCH_SIZE (50) to stay within ledger limits.
+    pub fn batch_deposit(
+        env: Env,
+        donor: Address,
+        token: Address,
+        slots: Vec<BatchSlot>,
+    ) {
+        donor.require_auth();
+
+        let n = slots.len();
+        if n == 0 {
+            panic!("batch must contain at least one slot");
+        }
+        if n > MAX_BATCH_SIZE {
+            panic!("batch exceeds maximum size of 50");
+        }
+
+        // Validate all slots and compute total in a single pass
     /// Each slot represents 1 tree on a small area (0.01 hectares for density calculation).
     pub fn batch_deposit(env: Env, donor: Address, token: Address, slots: Vec<BatchSlot>) {
         donor.require_auth();
@@ -518,6 +555,35 @@ impl TreeEscrow {
         for i in 0..n {
             let slot = slots.get(i).unwrap();
             if slot.amount <= 0 {
+                panic!("each slot amount must be positive");
+            }
+            let key = Self::record_key(&env, &slot.farmer);
+            if env.storage().persistent().has(&key) {
+                panic!("active escrow already exists for a farmer in this batch");
+            }
+            total += slot.amount;
+        }
+
+        // Single token transfer for the entire batch — gas-efficient
+        token::Client::new(&env, &token)
+            .transfer(&donor, &env.current_contract_address(), &total);
+
+        // Write one escrow record per slot
+        for i in 0..n {
+            let slot = slots.get(i).unwrap();
+            let key = Self::record_key(&env, &slot.farmer);
+            env.storage().persistent().set(&key, &EscrowRecord {
+                donor:          donor.clone(),
+                farmer:         slot.farmer.clone(),
+                token:          token.clone(),
+                total_amount:   slot.amount,
+                released:       0,
+                status:         EscrowStatus::Funded,
+                planted_at:     None,
+                planting_proof: None,
+                survival_proof: None,
+            });
+            env.events().publish((symbol_short!("deposit"), slot.farmer), slot.amount);
                 panic_with_error!(&env, HarvestaError::SlotAmountMustBePositive);
             }
             let key = DataKey::Escrow(slot.farmer.clone());
@@ -571,6 +637,11 @@ impl TreeEscrow {
         env.events().publish((symbol_short!("batch"), donor), total);
     }
 
+    /// Verifier calls this after GPS + photo proof of planting is validated.
+    /// Releases 75% of escrowed funds instantly to the farmer.
+    /// Mints one TREE token to the donor for each verified tree.
+    /// 
+    /// OPTIMIZED: Reduced storage operations from 4 to 2 (1 read + 1 write)
     /// Admin-verified planting: releases Tranche 1 (30%) and mints TREE rewards.
     pub fn verify_planting(
     /// Admin-verified progress update: streams 10% of the escrow to the planter.
