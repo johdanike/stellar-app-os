@@ -17,9 +17,19 @@
 //!      accepting a verification submission.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, Env,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env,
 };
 use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum VerifierStakingError {
+    MinStakeMustBePositive = 91,
+    VerifierAlreadyStaked = 92,
+    VerifierNotStaked = 93,
+    SlashExceedsStake = 94,
+    InsufficientStake = 95,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -70,7 +80,7 @@ impl VerifierStaking {
             panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
         if min_stake_amount <= 0 {
-            panic_with_error!(&env, HarvestaError::MinStakeMustBePositive);
+            panic_with_error!(&env, VerifierStakingError::MinStakeMustBePositive);
         }
         env.storage()
             .instance()
@@ -102,7 +112,7 @@ impl VerifierStaking {
         } else {
             // New stake: must meet the minimum
             if amount < min_stake {
-                panic_with_error!(&env, HarvestaError::InsufficientStake);
+                panic_with_error!(&env, VerifierStakingError::InsufficientStake);
             }
             token::Client::new(&env, &stake_token).transfer(
                 &verifier,
@@ -141,10 +151,10 @@ impl VerifierStaking {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::VerifierNotStaked));
+            .unwrap_or_else(|| panic_with_error!(&env, VerifierStakingError::VerifierNotStaked));
 
         if slash_amount > rec.amount {
-            panic_with_error!(&env, HarvestaError::SlashExceedsStake);
+            panic_with_error!(&env, VerifierStakingError::SlashExceedsStake);
         }
 
         rec.amount -= slash_amount;
@@ -173,7 +183,7 @@ impl VerifierStaking {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::VerifierNotStaked));
+            .unwrap_or_else(|| panic_with_error!(&env, VerifierStakingError::VerifierNotStaked));
 
         let amount = rec.amount;
         if amount > 0 {

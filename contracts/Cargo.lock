@@ -23,10 +23,7 @@ version = "0.1.0"
 dependencies = [
  "contract-utils",
  "harvesta-errors",
-<<<<<<< HEAD
-=======
  "shared",
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
  "soroban-sdk 21.7.7",
 ]
 
@@ -283,13 +280,9 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-<<<<<<< HEAD
-=======
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "carbon-credits"
 version = "0.1.0"
 dependencies = [
@@ -303,11 +296,9 @@ dependencies = [
  "admin-controls",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 ]
 
 [[package]]
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 name = "cc"
 version = "1.2.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -671,10 +662,7 @@ checksum = "2bfcf67fea2815c2fc3b90873fae90957be12ff417335dfadc7f52927feb03b2"
 name = "escrow"
 version = "0.1.0"
 dependencies = [
-<<<<<<< HEAD
-=======
  "admin-controls",
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
  "soroban-sdk 21.7.7",
 ]
 
@@ -1028,8 +1016,6 @@ dependencies = [
  "contract-utils",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
-<<<<<<< HEAD
-=======
 ]
 
 [[package]]
@@ -1039,7 +1025,6 @@ dependencies = [
  "contract-utils",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 ]
 
 [[package]]
@@ -1139,11 +1124,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-name = "planter-registry"
-version = "0.1.0"
-dependencies = [
-=======
 name = "planter-blacklist"
 version = "0.1.0"
 dependencies = [
@@ -1156,7 +1136,6 @@ name = "planter-registry"
 version = "0.1.0"
 dependencies = [
  "admin-controls",
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
  "soroban-sdk 21.7.7",
 ]
 
@@ -1967,6 +1946,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sponsor-receipt"
+version = "0.1.0"
+dependencies = [
+ "contract-utils",
+ "soroban-sdk 21.7.7",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2146,13 +2133,9 @@ dependencies = [
  "harvesta-errors",
  "proptest",
  "soroban-sdk 21.7.7",
-<<<<<<< HEAD
-=======
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
 name = "tree-registry"
 version = "0.1.0"
 dependencies = [
@@ -2160,11 +2143,9 @@ dependencies = [
  "escrow",
  "harvesta-errors",
  "soroban-sdk 21.7.7",
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 ]
 
 [[package]]
->>>>>>> 982c64ba2f219ccef8caa51fd46f92faa951b468
 name = "tree-token"
 version = "0.1.0"
 dependencies = [

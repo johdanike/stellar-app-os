@@ -3,12 +3,17 @@
 //! Shared error codes for all Harvesta / FarmCredit contracts.
 //!
 //! Import the crate, then call `panic_with_error!(env, HarvestaError::Variant)`
-//! instead of raw string panics.  Error codes are stable u32 values embedded in
+//! instead of raw string panics. Error codes are stable `u32` values embedded in
 //! the Stellar XDR so off-chain tooling can parse them without string matching.
 //!
+//! The contract suite has grown a lot, so this crate keeps the shared codes
+//! that are still used across multiple contracts. Contracts with overlapping
+//! domains define their own local `#[contracterror]` enums for
+//! contract-specific codes.
+
 use soroban_sdk::contracterror;
 
-#[contracterror] // This should now resolve correctly
+#[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum HarvestaError {
@@ -54,9 +59,6 @@ pub enum HarvestaError {
     TreeNotOpenForRelease = 33,
     NoFundsToRelease = 34,
 
-    // ── Species registry (62–64, 69–70) ───────────────────────────────────────
-    Co2MustBePositive = 62,
-    GrowthRateMustBePositive = 68,
     // ── Farmer registry (35–37) ───────────────────────────────────────────────
     FarmerAlreadyRegistered = 35,
     FarmerNotRegistered = 36,
@@ -73,7 +75,10 @@ pub enum HarvestaError {
     CompletionPercentageOutOfRange = 45,
     TotalReleasedExceedsMilestone = 46,
 
-    // ── Species Voting (50-59) ────────────────────────────────────────────────
+    // ── Misc contract-specific shared codes (47) ──────────────────────────────
+    InvalidRoyalty = 47,
+
+    // ── Species Voting (50–55) ────────────────────────────────────────────────
     /// The specified proposal ID does not exist.
     ProposalNotFound = 50,
     /// The voting period for this proposal has already ended.
@@ -87,22 +92,7 @@ pub enum HarvestaError {
     /// The proposal has already been executed and its outcome finalized.
     ProposalAlreadyExecuted = 55,
 
-    // ── Species registry (62–64) ──────────────────────────────────────────────
-    /// The CO2 absorption value must be greater than zero.
-    Co2MustBePositive = 62,
-    /// The maturity period in years must be greater than zero.
-    MaturityYearsMustBePositive = 63,
-    /// The specified species does not exist in the registry.
-    SpeciesNotFound = 64,
-
-    // ── Farmer registry (validator / hash — 67–68) ───────────────────────────
-    /// Caller is not a registered validator — gated read/write denied.
-    NotValidator = 67,
-    /// The SHA-256 hash supplied by the caller does not match the one stored
-    /// on-chain for this farmer's identity document.
-    HashMismatch = 68,
-
-    // ── ZK location / KYC / location-proof (61, 65–76) ───────────────────────
+    // ── Location proof / KYC / ZK (61, 65–77) ────────────────────────────────
     /// Caller is not a registered verifier.
     NotVerifier = 61,
     /// Region geohash is outside the approved Northern Nigeria boundary.
@@ -121,16 +111,27 @@ pub enum HarvestaError {
     AgeBelowMinimum = 71,
     /// The ZK proof's validity window has expired.
     ProofExpired = 72,
-    /// SHA-256 of the supplied document pre-image does not match the stored hash.
-    HashMismatch = 73,
-    /// Caller is not a registered validator.
-    NotValidator = 74,
-    /// Polygon has fewer than 3 vertices — not a valid polygon.
+    /// Polygon has fewer than 3 vertices - not a valid polygon.
     PolygonTooFewVertices = 75,
     /// The proof point falls outside the registered polygon boundary.
     PointOutsidePolygon = 76,
     /// The requested zone ID is not registered.
     ZoneNotFound = 77,
+
+    // ── Species registry (62–64, 68–70) ───────────────────────────────────────
+    Co2MustBePositive = 62,
+    GrowthRateMustBePositive = 68,
+    MaturityYearsMustBePositive = 63,
+    SpeciesNotFound = 64,
+    InvasiveSpecies = 69,
+    HighWaterUse = 70,
+
+    // ── Farmer registry validator gates (67–68) ──────────────────────────────
+    /// Caller is not a registered validator — gated read/write denied.
+    NotValidator = 67,
+    /// The SHA-256 hash supplied by the caller does not match the one stored
+    /// on-chain for this farmer's identity document.
+    HashMismatch = 68,
 
     // ── Arithmetic overflows (80–81) ──────────────────────────────────────────
     TreeTokenMintOverflow = 80,
@@ -180,5 +181,4 @@ pub enum FarmerError {
     InvalidCoordinatesCount = 5,
     NotValidator = 6,
     HashMismatch = 7,
-
 }
