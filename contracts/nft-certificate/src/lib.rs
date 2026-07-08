@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #9)")]
+    #[should_panic(expected = "Error(Contract, #3)")]
     fn test_merge_metadata_mismatch_rejected() {
         let (env, _, client) = setup();
 

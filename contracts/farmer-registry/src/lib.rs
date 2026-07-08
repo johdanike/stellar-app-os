@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #36)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_update_profile_unregistered_farmer_rejected() {
         let (env, _, validator, client) = setup();
         let stranger = Address::generate(&env);
@@ -862,7 +862,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #36)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_set_available_unregistered_panics() {
         let (env, _, _, client) = setup();
         let stranger = Address::generate(&env);
@@ -926,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #150)")]
+    #[should_panic(expected = "Error(Contract, #5)")]
     fn test_invalid_coordinates_count_low() {
         let (env, _, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -940,7 +940,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #150)")]
+    #[should_panic(expected = "Error(Contract, #5)")]
     fn test_invalid_coordinates_count_high() {
         let (env, _, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -955,7 +955,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #151)")]
+    #[should_panic(expected = "Error(Contract, #4)")]
     fn test_duplicate_plot_id() {
         let (env, _, _, client) = setup();
         let farmer = Address::generate(&env);

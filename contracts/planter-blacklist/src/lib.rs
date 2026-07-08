@@ -292,7 +292,7 @@ mod tests {
         assert_eq!(entry.planter, planter);
         assert_eq!(entry.reason_hash, reason_hash(&env, 7));
         assert_eq!(entry.blacklisted_by, admin);
-        assert!(entry.blacklisted_at > 0);
+        assert_eq!(entry.blacklisted_at, env.ledger().timestamp());
     }
 
     #[test]
