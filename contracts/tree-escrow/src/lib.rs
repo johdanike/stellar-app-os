@@ -1389,6 +1389,8 @@ impl TreeEscrow {
             .instance()
             .get(&DataKey::JobSizeThreshold)
             .unwrap_or_else(|| panic_with_error!(env, HarvestaError::NotInitialized))
+    }
+
     fn record_payout(env: &Env, planter: Address, amount: i128, payout_type: PayoutType) {
         let key = DataKey::PayoutHistory(planter.clone());
         let mut payouts: Vec<Payout> = env
@@ -1556,6 +1558,8 @@ mod tests {
 
         let record = ctx.client.get_record(&ctx.planter).unwrap();
         assert_eq!(record.status, EscrowStatus::Planted);
+    }
+
     #[test]
     fn test_custom_density_threshold() {
         // Test with custom density threshold of 500 trees/hectare
@@ -1901,6 +1905,8 @@ mod tests {
 
         ctx.client
             .verify_survival(&ctx.farmer, &proof(&ctx.env, 1), &70);
+    }
+
     // ── Dispute resolution (#469) ─────────────────────────────────────────────
 
     #[test]
