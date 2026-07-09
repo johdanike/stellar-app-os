@@ -29,7 +29,7 @@
 //! Validator management (`register_validator` / `revoke_validator`) is
 //! restricted to the admin address set at `initialize`.
 
-use harvesta_errors::HarvestaError;
+use harvesta_errors::{HarvestaError, FarmerError};
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Bytes,
     BytesN, Env, IntoVal, String,
@@ -188,7 +188,7 @@ impl FarmerRegistry {
 
         let key = Self::farmer_key(&env, &wallet_address);
         if env.storage().persistent().has(&key) {
-            panic_with_error!(&env, HarvestaError::FarmerAlreadyRegistered);
+            panic_with_error!(&env, FarmerError::FarmerAlreadyRegistered);
         }
 
         let profile = FarmerProfile {
@@ -255,7 +255,7 @@ impl FarmerRegistry {
             .storage()
             .persistent()
             .get(&key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::FarmerNotRegistered));
+            .unwrap_or_else(|| panic_with_error!(&env, FarmerError::FarmerNotRegistered));
 
         // Increment version counter and archive previous profile
         let version_key = Self::version_counter_key(&env, &wallet_address);
@@ -324,7 +324,7 @@ impl FarmerRegistry {
         env.storage()
             .persistent()
             .get(&Self::farmer_key(&env, &wallet_address))
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::FarmerNotRegistered))
+            .unwrap_or_else(|| panic_with_error!(&env, FarmerError::FarmerNotRegistered))
     }
 
     /// Returns a specific history entry for a farmer by version number.
@@ -375,7 +375,7 @@ impl FarmerRegistry {
             .persistent()
             .has(&Self::farmer_key(&env, &wallet_address))
         {
-            panic_with_error!(&env, HarvestaError::FarmerNotRegistered);
+            panic_with_error!(&env, FarmerError::FarmerNotRegistered);
         }
 
         let key = Self::availability_key(&env, &wallet_address);
@@ -417,12 +417,12 @@ impl FarmerRegistry {
 
         let len = coordinates.len();
         if len < 3 || len > 50 {
-            panic_with_error!(&env, HarvestaError::InvalidCoordinatesCount);
+            panic_with_error!(&env, FarmerError::InvalidCoordinatesCount);
         }
 
         let plot_key = Self::plot_key(&env, &plot_id);
         if env.storage().persistent().has(&plot_key) {
-            panic_with_error!(&env, HarvestaError::PlotAlreadyExists);
+            panic_with_error!(&env, FarmerError::PlotAlreadyExists);
         }
 
         let plot = FarmPlot {
@@ -498,7 +498,7 @@ impl FarmerRegistry {
 
     fn require_validator(env: &Env, caller: &Address) {
         if !Self::_is_validator(env, caller) {
-            panic_with_error!(env, HarvestaError::NotValidator);
+            panic_with_error!(env, FarmerError::NotValidator);
         }
     }
 
@@ -516,7 +516,7 @@ impl FarmerRegistry {
     fn assert_sha256_integrity(env: &Env, preimage: &Bytes, expected_hash: &BytesN<32>) {
         let computed: BytesN<32> = env.crypto().sha256(preimage).into();
         if computed != *expected_hash {
-            panic_with_error!(env, HarvestaError::HashMismatch);
+            panic_with_error!(env, FarmerError::HashMismatch);
         }
     }
 
@@ -528,7 +528,7 @@ impl FarmerRegistry {
                 return;
             }
         }
-        panic_with_error!(env, HarvestaError::InvalidRegion);
+        panic_with_error!(env, FarmerError::InvalidRegion);
     }
 
     fn farmer_key(env: &Env, wallet: &Address) -> soroban_sdk::Val {
@@ -620,7 +620,7 @@ mod tests {
 
     #[test]
     fn test_revoke_validator() {
-        let (env, admin, validator, client) = setup();
+        let (_env, admin, validator, client) = setup();
 
         assert!(client.is_validator(&validator));
         client.revoke_validator(&admin, &validator);
@@ -668,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_get_farmer_verified_non_validator_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -681,7 +681,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #35)")]
+    #[should_panic(expected = "Error(Contract, #1)")]
     fn test_double_registration_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -693,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #37)")]
+    #[should_panic(expected = "Error(Contract, #3)")]
     fn test_invalid_region_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -703,7 +703,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_register_farmer_non_validator_rejected() {
         let (env, _, _, client) = setup();
         let attacker = Address::generate(&env);
@@ -716,7 +716,7 @@ mod tests {
     // ── SHA-256 integrity ─────────────────────────────────────────────────────
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #68)")]
+    #[should_panic(expected = "Error(Contract, #7)")]
     fn test_hash_mismatch_on_register_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -728,7 +728,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #68)")]
+    #[should_panic(expected = "Error(Contract, #7)")]
     fn test_hash_mismatch_on_update_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -804,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #67)")]
+    #[should_panic(expected = "Error(Contract, #6)")]
     fn test_profile_history_non_validator_rejected() {
         let (env, _, validator, client) = setup();
         let farmer = Address::generate(&env);
@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #36)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_update_profile_unregistered_farmer_rejected() {
         let (env, _, validator, client) = setup();
         let stranger = Address::generate(&env);
@@ -862,7 +862,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #36)")]
+    #[should_panic(expected = "Error(Contract, #2)")]
     fn test_set_available_unregistered_panics() {
         let (env, _, _, client) = setup();
         let stranger = Address::generate(&env);
@@ -926,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #150)")]
+    #[should_panic(expected = "Error(Contract, #5)")]
     fn test_invalid_coordinates_count_low() {
         let (env, _, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -940,7 +940,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #150)")]
+    #[should_panic(expected = "Error(Contract, #5)")]
     fn test_invalid_coordinates_count_high() {
         let (env, _, _, client) = setup();
         let farmer = Address::generate(&env);
@@ -955,7 +955,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #151)")]
+    #[should_panic(expected = "Error(Contract, #4)")]
     fn test_duplicate_plot_id() {
         let (env, _, _, client) = setup();
         let farmer = Address::generate(&env);

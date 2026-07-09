@@ -1,9 +1,18 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, panic_with_error, symbol_short, Address, Env, IntoVal, Symbol, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, panic_with_error,
+    symbol_short, Address, Env, IntoVal, Symbol, Vec,
 };
 use harvesta_errors::HarvestaError;
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum TreeRegistryError {
+    NotFound = 85,
+    InvalidStatus = 86,
+    NotAuthorized = 87,
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -178,10 +187,10 @@ impl TreeRegistry {
             .storage()
             .persistent()
             .get(&tree_key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, TreeRegistryError::NotFound));
 
         if tree_record.status != TreeStatus::Planted {
-            panic_with_error!(&env, HarvestaError::InvalidStatus);
+            panic_with_error!(&env, TreeRegistryError::InvalidStatus);
         }
 
         tree_record.notes_hash = notes_hash.clone();
@@ -265,19 +274,19 @@ impl TreeRegistry {
             .storage()
             .persistent()
             .get(&tree_key)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::NotFound));
+            .unwrap_or_else(|| panic_with_error!(&env, TreeRegistryError::NotFound));
 
         if tree_record.sponsor != sponsor {
-            panic_with_error!(&env, HarvestaError::NotAuthorized);
+            panic_with_error!(&env, TreeRegistryError::NotAuthorized);
         }
         if tree_record.status == TreeStatus::Rejected {
-            panic_with_error!(&env, HarvestaError::InvalidStatus);
+            panic_with_error!(&env, TreeRegistryError::InvalidStatus);
         }
 
         let flag = Self::milestone_flag(milestone_years)
-            .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::InvalidStatus));
+            .unwrap_or_else(|| panic_with_error!(&env, TreeRegistryError::InvalidStatus));
         if tree_record.milestone_claims & flag != 0 {
-            panic_with_error!(&env, HarvestaError::InvalidStatus);
+            panic_with_error!(&env, TreeRegistryError::InvalidStatus);
         }
 
         let required_timestamp = tree_record
@@ -402,7 +411,7 @@ impl TreeRegistry {
             .get(&symbol_short!("VERIFIERS"))
             .unwrap_or_else(|| Vec::new(env));
         if !verifiers.contains(verifier) {
-            panic_with_error!(env, HarvestaError::NotAuthorized);
+            panic_with_error!(env, TreeRegistryError::NotAuthorized);
         }
     }
 

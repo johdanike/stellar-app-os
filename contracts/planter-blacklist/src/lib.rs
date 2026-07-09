@@ -225,7 +225,7 @@ impl PlanterBlacklist {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};
+    use soroban_sdk::{testutils::{Address as _, Ledger}, Address, BytesN, Env};
 
     fn setup() -> (Env, Address, PlanterBlacklistClient<'static>) {
         let env = Env::default();
@@ -292,7 +292,7 @@ mod tests {
         assert_eq!(entry.planter, planter);
         assert_eq!(entry.reason_hash, reason_hash(&env, 7));
         assert_eq!(entry.blacklisted_by, admin);
-        assert!(entry.blacklisted_at > 0);
+        assert_eq!(entry.blacklisted_at, env.ledger().timestamp());
     }
 
     #[test]

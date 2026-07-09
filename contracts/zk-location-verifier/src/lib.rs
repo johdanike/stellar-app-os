@@ -108,7 +108,9 @@ impl ZkLocationVerifier {
         if env.storage().instance().has(&symbol_short!("ADMIN")) {
             panic_with_error!(&env, HarvestaError::AlreadyInitialized);
         }
-        env.storage().instance().set(&symbol_short!("ADMIN"), &admin);
+        env.storage()
+            .instance()
+            .set(&symbol_short!("ADMIN"), &admin);
         env.storage()
             .instance()
             .set(&symbol_short!("PRFTTL"), &cache_ttl_ledgers);
@@ -172,11 +174,7 @@ impl ZkLocationVerifier {
     /// Idempotent on duplicate submissions: a `(commitment, proof_digest)` pair
     /// already verified within the proof-cache TTL window short-circuits and
     /// emits `prfHit` — see #399.
-    pub fn approve_location(
-        env: Env,
-        commitment: BytesN<32>,
-        proof_digest: BytesN<32>,
-    ) {
+    pub fn approve_location(env: Env, commitment: BytesN<32>, proof_digest: BytesN<32>) {
         Self::require_admin(&env);
 
         // Cache hit → return early without re-running verification.
@@ -186,10 +184,8 @@ impl ZkLocationVerifier {
             .temporary()
             .get::<BytesN<32>, CachedProofResult>(&cache_key)
         {
-            env.events().publish(
-                (symbol_short!("prfHit"), commitment.clone()),
-                cached,
-            );
+            env.events()
+                .publish((symbol_short!("prfHit"), commitment.clone()), cached);
             return;
         }
 
@@ -217,10 +213,8 @@ impl ZkLocationVerifier {
 
         Self::cache_result(&env, &cache_key, CachedProofResult::Approved);
 
-        env.events().publish(
-            (symbol_short!("zkApprove"), record.farmer),
-            commitment,
-        );
+        env.events()
+            .publish((symbol_short!("zkApprove"), record.farmer), commitment);
     }
 
     /// Admin rejects a commitment (e.g. ZK circuit failed or coordinates out of bounds).
@@ -237,10 +231,8 @@ impl ZkLocationVerifier {
             .temporary()
             .get::<BytesN<32>, CachedProofResult>(&cache_key)
         {
-            env.events().publish(
-                (symbol_short!("prfHit"), commitment.clone()),
-                cached,
-            );
+            env.events()
+                .publish((symbol_short!("prfHit"), commitment.clone()), cached);
             return;
         }
 
@@ -262,10 +254,8 @@ impl ZkLocationVerifier {
 
         Self::cache_result(&env, &cache_key, CachedProofResult::Rejected);
 
-        env.events().publish(
-            (symbol_short!("zkReject"), record.farmer),
-            commitment,
-        );
+        env.events()
+            .publish((symbol_short!("zkReject"), record.farmer), commitment);
     }
 
     /// Returns the verification record for a commitment hash.
@@ -330,9 +320,7 @@ impl ZkLocationVerifier {
             return;
         }
         env.storage().temporary().set(cache_key, &result);
-        env.storage()
-            .temporary()
-            .extend_ttl(cache_key, ttl, ttl);
+        env.storage().temporary().extend_ttl(cache_key, ttl, ttl);
     }
 
     /// Approved 2-character geohash prefixes covering Northern Nigeria

@@ -13,7 +13,7 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, Address, Env, String,
     Vec,
 };
-use harvesta_errors::HarvestaError;
+use harvesta_errors::{HarvestaError, NftError};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ impl NftCertificate {
             .set(&symbol_short!("PAUSED"), &false);
         env.storage()
             .instance()
-            .set(&symbol_short!("TOKEN_COUNT"), &0u64);
+            .set(&symbol_short!("TOK_COUNT"), &0u64);
     }
 
     /// Mint a new certificate NFT.
@@ -84,7 +84,7 @@ impl NftCertificate {
 
         // Check if token already exists
         if env.storage().instance().has(&token_id) {
-            panic_with_error!(&env, HarvestaError::TokenAlreadyMinted);
+            panic_with_error!(&env, NftError::TokenAlreadyMinted);
         }
 
         let token = Token {
@@ -97,11 +97,11 @@ impl NftCertificate {
         let count: u64 = env
             .storage()
             .instance()
-            .get(&symbol_short!("TOKEN_COUNT"))
+            .get(&symbol_short!("TOK_COUNT"))
             .unwrap_or(0);
         env.storage()
             .instance()
-            .set(&symbol_short!("TOKEN_COUNT"), &count.checked_add(1).expect("token count overflow"));
+            .set(&symbol_short!("TOK_COUNT"), &count.checked_add(1).expect("token count overflow"));
 
         env.events()
             .publish((symbol_short!("minted"), to), token_id);
@@ -142,7 +142,7 @@ impl NftCertificate {
 
         // Check if new token ID already exists
         if env.storage().instance().has(&new_token_id) {
-            panic_with_error!(&env, HarvestaError::TokenAlreadyMinted);
+            panic_with_error!(&env, NftError::TokenAlreadyMinted);
         }
 
         let mut total_tree_count = 0i128;
@@ -155,8 +155,8 @@ impl NftCertificate {
             let token: Token = env
                 .storage()
                 .instance()
-                .get(token_id)
-                .unwrap_or_else(|| panic_with_error!(&env, HarvestaError::TokenNotFound));
+                .get(&token_id)
+                .unwrap_or_else(|| panic_with_error!(&env, NftError::TokenNotFound));
 
             // Verify ownership
             if token.owner != owner {
@@ -171,16 +171,16 @@ impl NftCertificate {
                 .expect("co2 offset overflow");
 
             // Burn the certificate by removing it from storage
-            env.storage().instance().remove(token_id);
+            env.storage().instance().remove(&token_id);
         }
 
         // Verify that the provided merged metadata matches the aggregated values
         if total_tree_count != merged_metadata.tree_count {
-            panic_with_error!(&env, HarvestaError::MetadataMismatch);
+            panic_with_error!(&env, NftError::MetadataMismatch);
         }
 
         if total_co2_offset != merged_metadata.co2_offset_kg {
-            panic_with_error!(&env, HarvestaError::MetadataMismatch);
+            panic_with_error!(&env, NftError::MetadataMismatch);
         }
 
         // Mint the new consolidated certificate
@@ -195,7 +195,7 @@ impl NftCertificate {
         let count: u64 = env
             .storage()
             .instance()
-            .get(&symbol_short!("TOKEN_COUNT"))
+            .get(&symbol_short!("TOK_COUNT"))
             .unwrap_or(0);
         let new_count = count
             .checked_sub(token_ids.len() as u64)
@@ -204,7 +204,7 @@ impl NftCertificate {
             .expect("token count overflow");
         env.storage()
             .instance()
-            .set(&symbol_short!("TOKEN_COUNT"), &new_count);
+            .set(&symbol_short!("TOK_COUNT"), &new_count);
 
         env.events()
             .publish((symbol_short!("merged"), owner), (new_token_id, token_ids.len()));
@@ -227,7 +227,7 @@ impl NftCertificate {
     pub fn total_supply(env: Env) -> u64 {
         env.storage()
             .instance()
-            .get(&symbol_short!("TOKEN_COUNT"))
+            .get(&symbol_short!("TOK_COUNT"))
             .unwrap_or(0)
     }
 
@@ -289,7 +289,7 @@ impl NftCertificate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{Address, Env};
+    use soroban_sdk::{testutils::Address as _, Address, Env};
 
     fn setup() -> (Env, Address, NftCertificateClient<'static>) {
         let env = Env::default();
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_initialize() {
-        let (env, _, client) = setup();
+        let (_env, _, client) = setup();
         assert!(!client.is_paused());
     }
 
@@ -425,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #9)")]
+    #[should_panic(expected = "Error(Contract, #3)")]
     fn test_merge_metadata_mismatch_rejected() {
         let (env, _, client) = setup();
 
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_pause_unpause() {
-        let (env, _, client) = setup();
+        let (_env, _, client) = setup();
 
         client.pause();
         assert!(client.is_paused());
@@ -472,7 +472,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Error(Contract, #1)")]
     fn test_double_initialize_rejected() {
-        let (env, admin, client) = setup();
+        let (_env, admin, client) = setup();
         client.initialize(&admin);
     }
 }
